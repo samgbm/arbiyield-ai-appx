@@ -40,10 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-.vercel
-
-*/target/
-
+# Rust / Stylus (Cargo build artifacts — large binaries; never commit)
+target/
+**/target/
 **/*.rs.bk
-
-*.pem
