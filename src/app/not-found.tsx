@@ -8,13 +8,13 @@ export default function NotFound() {
         404
       </p>
       <h1 className="mt-3 font-display text-5xl text-foreground">
-        Agent not found
+        Page not found
       </h1>
       <p className="mt-3 text-sm text-[var(--accent)]">
-        That listing may have moved. Browse the catalog instead.
+        That route doesn&apos;t exist. Head back to ArbiYield AI.
       </p>
       <Link href="/" className="mt-8">
-        <Button>Back to market</Button>
+        <Button>Back home</Button>
       </Link>
     </div>
   );
