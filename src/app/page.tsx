@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChatApiTestButton } from "@/components/ChatApiTestButton";
+import { ChatInterface } from "@/components/chat/ChatInterface";
 import { StrategyStats } from "@/components/StrategyStats";
 
 export default function HomePage() {
@@ -20,7 +20,7 @@ export default function HomePage() {
         </div>
 
         <StrategyStats />
-        <ChatApiTestButton />
+        <ChatInterface />
 
         <div className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div>

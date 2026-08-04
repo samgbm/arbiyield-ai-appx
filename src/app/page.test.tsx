@@ -5,10 +5,8 @@ jest.mock("../components/StrategyStats", () => ({
   StrategyStats: () => <div data-testid="strategy-stats">Strategy stats</div>,
 }));
 
-jest.mock("../components/ChatApiTestButton", () => ({
-  ChatApiTestButton: () => (
-    <div data-testid="chat-api-test">Chat API test</div>
-  ),
+jest.mock("../components/chat/ChatInterface", () => ({
+  ChatInterface: () => <div data-testid="chat-interface">Chat interface</div>,
 }));
 
 describe("HomePage", () => {
@@ -24,6 +22,7 @@ describe("HomePage", () => {
     ).toBeInTheDocument();
 
     expect(screen.getByTestId("strategy-stats")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
 
     expect(
       screen.getByText(/ETH Lima 2026/i),
