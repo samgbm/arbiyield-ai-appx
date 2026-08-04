@@ -8,10 +8,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   return (
     <NextThemesProvider
       attribute="class"
-      defaultTheme="light"
-      enableSystem={false}
+      defaultTheme="system"
+      enableSystem
       themes={[...THEMES]}
       disableTransitionOnChange
+      storageKey="arbiyield-theme"
     >
       {children}
     </NextThemesProvider>

@@ -1,6 +1,11 @@
+/** Theme class names applied via next-themes `attribute="class"`. */
 export const THEMES = [
   "light",
+  "dim",
   "dark",
+  "quantum",
+  "ethlima",
+  "arbiscan",
   "midnight",
   "ocean",
   "forest",
@@ -14,19 +19,49 @@ export const THEMES = [
 
 export type ThemeName = (typeof THEMES)[number];
 
+/** Includes Auto (system) for the picker UI. */
+export type ThemeOption = ThemeName | "system";
+
+export const THEME_OPTIONS: ThemeOption[] = ["system", ...THEMES];
+
 export const THEME_META: Record<
-  ThemeName,
+  ThemeOption,
   { label: string; swatch: string; description: string }
 > = {
+  system: {
+    label: "Auto (System)",
+    swatch: "linear-gradient(135deg,#f8f9fa 50%,#12161c 50%)",
+    description: "Follow OS light / dark preference",
+  },
   light: {
     label: "Light",
-    swatch: "#f7f8fa",
-    description: "Clean daylight storefront",
+    swatch: "#ffffff",
+    description: "Etherscan / Arbiscan daylight",
+  },
+  dim: {
+    label: "Dim",
+    swatch: "#1c2333",
+    description: "Explorer dim mode",
   },
   dark: {
     label: "Dark",
-    swatch: "#0f1218",
-    description: "High-contrast night mode",
+    swatch: "#0b0e11",
+    description: "Explorer night mode",
+  },
+  quantum: {
+    label: "Quantum3",
+    swatch: "#020202",
+    description: "quantum3labs.com — black + indigo",
+  },
+  ethlima: {
+    label: "ETH Lima",
+    swatch: "#131313",
+    description: "hackathon.ethlima.org sponsors",
+  },
+  arbiscan: {
+    label: "Arbiscan",
+    swatch: "#1e2022",
+    description: "Sepolia Arbiscan chrome",
   },
   midnight: {
     label: "Midnight",

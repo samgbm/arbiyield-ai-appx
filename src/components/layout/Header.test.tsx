@@ -1,15 +1,24 @@
 import { render, screen } from "@testing-library/react";
+import { ThemeProvider } from "@/components/providers/theme-provider";
 import { Header } from "./Header";
+
+function renderHeader() {
+  return render(
+    <ThemeProvider>
+      <Header />
+    </ThemeProvider>,
+  );
+}
 
 describe("Header", () => {
   it("renders the ArbiYield AI brand name", () => {
-    render(<Header />);
+    renderHeader();
 
     expect(screen.getByText("ArbiYield AI")).toBeInTheDocument();
   });
 
   it("renders placeholder navigation links", () => {
-    render(<Header />);
+    renderHeader();
 
     expect(screen.getAllByRole("link", { name: "Dashboard" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Strategies" }).length).toBeGreaterThan(0);
@@ -17,7 +26,7 @@ describe("Header", () => {
   });
 
   it("renders a Connect Wallet placeholder", () => {
-    render(<Header />);
+    renderHeader();
 
     expect(
       screen.getAllByRole("button", { name: /connect wallet/i }).length,

@@ -1,16 +1,34 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Check, Palette } from "lucide-react";
+import { Check, Monitor, Palette } from "lucide-react";
 import { useTheme } from "next-themes";
-import { THEMES, THEME_META, type ThemeName } from "@/lib/themes";
+import {
+  THEME_META,
+  THEME_OPTIONS,
+  type ThemeOption,
+} from "@/lib/themes";
 
 function subscribe() {
   return () => {};
 }
 
+/** Fixed footprint so SSR → client theme resolution does not shift the header. */
+function ThemeSwitcherSkeleton() {
+  return (
+    <div
+      className="inline-flex h-10 w-[8.75rem] items-center gap-2 rounded-xl border border-border bg-secondary px-3"
+      aria-hidden
+      data-testid="theme-switcher-skeleton"
+    >
+      <span className="size-4 shrink-0 rounded animate-pulse-soft bg-[color-mix(in_oklab,var(--muted)_40%,transparent)]" />
+      <span className="hidden h-3 flex-1 rounded animate-pulse-soft bg-[color-mix(in_oklab,var(--muted)_35%,transparent)] sm:block" />
+    </div>
+  );
+}
+
 export function ThemeSwitcher() {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const mounted = useSyncExternalStore(subscribe, () => true, () => false);
 
@@ -23,21 +41,29 @@ export function ThemeSwitcher() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  const current = (mounted ? theme : "light") as ThemeName;
+  if (!mounted) {
+    return <ThemeSwitcherSkeleton />;
+  }
+
+  const current = (theme ?? "system") as ThemeOption;
+  const meta = THEME_META[current] ?? THEME_META.system;
 
   return (
     <div className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-secondary px-3 text-sm font-medium text-foreground transition hover:border-[color-mix(in_oklab,var(--primary)_40%,var(--border))]"
+        className="inline-flex h-10 w-[8.75rem] items-center gap-2 rounded-xl border border-border bg-secondary px-3 text-sm font-medium text-foreground transition hover:border-[color-mix(in_oklab,var(--primary)_40%,var(--border))]"
         aria-expanded={open}
         aria-haspopup="dialog"
+        aria-label={`Theme: ${meta.label}`}
       >
-        <Palette className="size-4 text-primary" />
-        <span className="hidden sm:inline">
-          {mounted ? THEME_META[current]?.label ?? "Theme" : "Theme"}
-        </span>
+        {current === "system" ? (
+          <Monitor className="size-4 shrink-0 text-primary" />
+        ) : (
+          <Palette className="size-4 shrink-0 text-primary" />
+        )}
+        <span className="truncate">{meta.label}</span>
       </button>
 
       {open && (
@@ -51,15 +77,16 @@ export function ThemeSwitcher() {
           <div
             role="dialog"
             aria-label="Choose theme"
-            className="absolute right-0 z-50 mt-2 w-[min(20rem,calc(100vw-1.5rem))] rounded-2xl border border-border bg-secondary p-3 shadow-[var(--shadow-soft)] animate-fade"
+            className="absolute right-0 z-50 mt-2 max-h-[min(24rem,70vh)] w-[min(20rem,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-border bg-secondary p-3 shadow-[var(--shadow-soft)] animate-fade"
           >
             <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
-              11 themes
+              Themes · Light / Dim / Dark / Auto
             </p>
             <div className="grid grid-cols-1 gap-1">
-              {THEMES.map((name) => {
-                const meta = THEME_META[name];
+              {THEME_OPTIONS.map((name) => {
+                const item = THEME_META[name];
                 const active = current === name;
+                const isSystem = name === "system";
                 return (
                   <button
                     key={name}
@@ -76,14 +103,19 @@ export function ThemeSwitcher() {
                   >
                     <span
                       className="size-7 shrink-0 rounded-lg border border-border"
-                      style={{ background: meta.swatch }}
+                      style={{ background: item.swatch }}
+                      title={
+                        isSystem
+                          ? `Resolved: ${resolvedTheme ?? "…"}`
+                          : item.label
+                      }
                     />
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-semibold text-foreground">
-                        {meta.label}
+                        {item.label}
                       </span>
                       <span className="block truncate text-xs text-[var(--accent)]">
-                        {meta.description}
+                        {item.description}
                       </span>
                     </span>
                     {active && <Check className="size-4 text-primary" />}
