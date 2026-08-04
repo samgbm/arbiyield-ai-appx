@@ -6,12 +6,11 @@ export const CONTRACT_ADDRESS = (process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ||
 
 /**
  * Solidity ABI from `cargo stylus export-abi`.
- * Stylus maps Rust snake_case to Solidity camelCase:
- * - total_strategies_executed → totalStrategiesExecuted
- * - get_user_strategy_count → getUserStrategyCount
+ * Stylus maps Rust snake_case → Solidity camelCase (e.g. execute_strategy → executeStrategy).
  */
 export const strategyExecutorABI = parseAbi([
   "function totalStrategiesExecuted() view returns (uint256)",
   "function getUserStrategyCount(address user) view returns (uint256)",
   "function executeStrategy(string strategy_name, uint256 expected_yield)",
+  "event StrategyExecuted(address indexed user, string strategyName, uint256 expectedYield)",
 ]);
