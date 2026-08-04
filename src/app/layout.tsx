@@ -8,6 +8,7 @@ import {
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { Web3Provider } from "@/components/providers/Web3Provider";
 import "./globals.css";
 
 /** Explorer-style UI font (Etherscan / Arbiscan). */
@@ -60,9 +61,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="flex min-h-full flex-col font-sans" suppressHydrationWarning>
         <ThemeProvider>
-          <Header />
-          <main className="flex-1">{children}</main>
-          <Footer />
+          <Web3Provider>
+            <Header />
+            <main className="flex-1">{children}</main>
+            <Footer />
+          </Web3Provider>
         </ThemeProvider>
       </body>
     </html>
