@@ -1,35 +1,41 @@
 import { render, screen } from "@testing-library/react";
-import { ThemeProvider } from "@/components/providers/theme-provider";
 import { Header } from "./Header";
 
-function renderHeader() {
-  return render(
-    <ThemeProvider>
-      <Header />
-    </ThemeProvider>,
-  );
-}
+jest.mock("@rainbow-me/rainbowkit", () => ({
+  ConnectButton: () => <button type="button">Connect Wallet</button>,
+}));
+
+jest.mock("../theme/theme-switcher", () => ({
+  ThemeSwitcher: () => (
+    <div
+      className="inline-flex h-10 w-[8.75rem]"
+      data-testid="theme-switcher-mock"
+    >
+      Theme
+    </div>
+  ),
+}));
 
 describe("Header", () => {
   it("renders the ArbiYield AI brand name", () => {
-    renderHeader();
+    render(<Header />);
 
     expect(screen.getByText("ArbiYield AI")).toBeInTheDocument();
   });
 
   it("renders placeholder navigation links", () => {
-    renderHeader();
+    render(<Header />);
 
     expect(screen.getAllByRole("link", { name: "Dashboard" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Strategies" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Docs" }).length).toBeGreaterThan(0);
   });
 
-  it("renders a Connect Wallet placeholder", () => {
-    renderHeader();
+  it("renders the Connect Wallet button", () => {
+    render(<Header />);
 
     expect(
-      screen.getAllByRole("button", { name: /connect wallet/i }).length,
-    ).toBeGreaterThan(0);
+      screen.getByRole("button", { name: /connect wallet/i }),
+    ).toBeInTheDocument();
   });
 });

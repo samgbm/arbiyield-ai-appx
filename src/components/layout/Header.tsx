@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Menu, Wallet, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { Menu, X } from "lucide-react";
 import { ThemeSwitcher } from "@/components/theme/theme-switcher";
 
 const NAV_LINKS = [
@@ -49,33 +49,24 @@ export function Header() {
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
           <div className="hidden sm:block">
             <ThemeSwitcher />
           </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="md"
-            className="hidden min-h-11 sm:inline-flex"
-            disabled
-            aria-label="Connect Wallet (coming soon)"
-          >
-            <Wallet className="size-4" />
-            Connect Wallet
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="inline-flex min-h-11 min-w-11 px-0 sm:hidden"
-            disabled
-            aria-label="Connect Wallet (coming soon)"
-          >
-            <Wallet className="size-4" />
-          </Button>
+          <div className="flex items-center [&_button]:min-h-10">
+            <ConnectButton
+              chainStatus="icon"
+              accountStatus={{
+                smallScreen: "avatar",
+                largeScreen: "full",
+              }}
+              showBalance={{
+                smallScreen: false,
+                largeScreen: true,
+              }}
+            />
+          </div>
 
           <button
             type="button"
@@ -113,17 +104,6 @@ export function Header() {
             </span>
             <ThemeSwitcher />
           </div>
-          <Button
-            type="button"
-            variant="primary"
-            size="lg"
-            className="mt-3 w-full min-h-12"
-            disabled
-            aria-label="Connect Wallet (coming soon)"
-          >
-            <Wallet className="size-4" />
-            Connect Wallet
-          </Button>
         </div>
       )}
     </header>

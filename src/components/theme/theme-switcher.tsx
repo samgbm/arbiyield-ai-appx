@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Check, Monitor, Palette } from "lucide-react";
-import { useTheme } from "next-themes";
+import { useTheme } from "@wrksz/themes/client";
 import {
   THEME_META,
   THEME_OPTIONS,
+  type ThemeName,
   type ThemeOption,
 } from "@/lib/themes";
 
@@ -28,7 +29,7 @@ function ThemeSwitcherSkeleton() {
 }
 
 export function ThemeSwitcher() {
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme } = useTheme<ThemeName>();
   const [open, setOpen] = useState(false);
   const mounted = useSyncExternalStore(subscribe, () => true, () => false);
 

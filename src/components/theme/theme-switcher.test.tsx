@@ -1,17 +1,25 @@
 import { render, screen } from "@testing-library/react";
-import { ThemeProvider } from "@/components/providers/theme-provider";
+
+jest.mock(
+  "@wrksz/themes/client",
+  () => ({
+    useTheme: () => ({
+      theme: "system",
+      setTheme: jest.fn(),
+      resolvedTheme: "light",
+      themes: ["light", "dark"],
+      systemTheme: "light",
+    }),
+  }),
+  { virtual: true },
+);
+
 import { ThemeSwitcher } from "./theme-switcher";
 
 describe("ThemeSwitcher", () => {
-  it("renders a fixed-size skeleton before mount to avoid layout jump", () => {
-    render(
-      <ThemeProvider>
-        <ThemeSwitcher />
-      </ThemeProvider>,
-    );
+  it("renders a fixed-size control to avoid layout jump", () => {
+    render(<ThemeSwitcher />);
 
-    // On first paint in jsdom, useSyncExternalStore client snapshot is true,
-    // so we assert the control keeps a stable width class either way.
     const control =
       screen.queryByTestId("theme-switcher-skeleton") ??
       screen.getByRole("button", { name: /theme:/i });

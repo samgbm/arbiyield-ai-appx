@@ -1,12 +1,10 @@
-"use client";
-
-import { ThemeProvider as NextThemesProvider } from "next-themes";
+import { ThemeProvider as WrkszThemeProvider } from "@wrksz/themes/next";
 import type { ReactNode } from "react";
 import { THEMES } from "@/lib/themes";
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
+export async function ThemeProvider({ children }: { children: ReactNode }) {
   return (
-    <NextThemesProvider
+    <WrkszThemeProvider
       attribute="class"
       defaultTheme="system"
       enableSystem
@@ -15,6 +13,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       storageKey="arbiyield-theme"
     >
       {children}
-    </NextThemesProvider>
+    </WrkszThemeProvider>
   );
 }
