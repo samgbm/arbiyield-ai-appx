@@ -1,0 +1,10 @@
+/home/sam/samprojects/arbiyield-ai-appx/arbi-yield-contract/target/debug/deps/alloy_transport_http-d6a3c37de9201730.d: /home/sam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/alloy-transport-http-1.8.3/src/lib.rs /home/sam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/alloy-transport-http-1.8.3/src/reqwest_transport.rs /home/sam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/alloy-transport-http-1.8.3/src/layers/mod.rs /home/sam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/alloy-transport-http-1.8.3/src/../README.md
+
+/home/sam/samprojects/arbiyield-ai-appx/arbi-yield-contract/target/debug/deps/liballoy_transport_http-d6a3c37de9201730.rlib: /home/sam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/alloy-transport-http-1.8.3/src/lib.rs /home/sam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/alloy-transport-http-1.8.3/src/reqwest_transport.rs /home/sam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/alloy-transport-http-1.8.3/src/layers/mod.rs /home/sam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/alloy-transport-http-1.8.3/src/../README.md
+
+/home/sam/samprojects/arbiyield-ai-appx/arbi-yield-contract/target/debug/deps/liballoy_transport_http-d6a3c37de9201730.rmeta: /home/sam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/alloy-transport-http-1.8.3/src/lib.rs /home/sam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/alloy-transport-http-1.8.3/src/reqwest_transport.rs /home/sam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/alloy-transport-http-1.8.3/src/layers/mod.rs /home/sam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/alloy-transport-http-1.8.3/src/../README.md
+
+/home/sam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/alloy-transport-http-1.8.3/src/lib.rs:
+/home/sam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/alloy-transport-http-1.8.3/src/reqwest_transport.rs:
+/home/sam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/alloy-transport-http-1.8.3/src/layers/mod.rs:
+/home/sam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/alloy-transport-http-1.8.3/src/../README.md:
