@@ -5,6 +5,12 @@ jest.mock("../components/StrategyStats", () => ({
   StrategyStats: () => <div data-testid="strategy-stats">Strategy stats</div>,
 }));
 
+jest.mock("../components/ChatApiTestButton", () => ({
+  ChatApiTestButton: () => (
+    <div data-testid="chat-api-test">Chat API test</div>
+  ),
+}));
+
 describe("HomePage", () => {
   it("renders the ArbiYield AI homepage correctly", () => {
     render(<HomePage />);
