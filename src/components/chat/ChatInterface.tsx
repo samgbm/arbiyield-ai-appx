@@ -10,6 +10,7 @@ import {
 } from "react";
 import { StrategySchema } from "@/lib/schemas";
 import { StrategyCard } from "./StrategyCard";
+import { StrategySkeleton } from "./StrategySkeleton";
 
 const PRESET_PROMPTS = [
   "Find me a low-risk USDC strategy",
@@ -60,7 +61,10 @@ export function ChatInterface() {
     inputRef.current?.focus();
   }
 
-  const showCard = Boolean(object) || isLoading;
+  const hasStrategyName = Boolean(object?.strategyName?.trim());
+  const showSkeleton = isLoading && !hasStrategyName;
+  const showCard = hasStrategyName;
+  const showResult = showSkeleton || showCard;
 
   return (
     <section
@@ -86,7 +90,7 @@ export function ChatInterface() {
         ref={scrollRef}
         className="flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 py-4 sm:px-5"
       >
-        {!submittedPrompt && !showCard && (
+        {!submittedPrompt && !showResult && (
           <div className="flex h-full min-h-40 flex-col items-center justify-center px-4 text-center">
             <p className="font-display text-2xl tracking-tight text-foreground">
               What yield are you hunting?
@@ -109,7 +113,8 @@ export function ChatInterface() {
           </article>
         )}
 
-        {showCard && <StrategyCard strategy={object ?? {}} />}
+        {showSkeleton && <StrategySkeleton />}
+        {showCard && object && <StrategyCard strategy={object} />}
       </div>
 
       <div className="border-t border-border bg-secondary/80 px-3 py-3 backdrop-blur-sm sm:px-5">
