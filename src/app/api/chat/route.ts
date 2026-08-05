@@ -1,8 +1,4 @@
-import {
-  convertToModelMessages,
-  streamObject,
-  type UIMessage,
-} from "ai";
+import { streamObject, type ModelMessage } from "ai";
 import { DEFAULT_MODEL } from "@/lib/ai";
 import { StrategySchema } from "@/lib/schemas";
 
@@ -14,15 +10,15 @@ Focus on low-risk, verifiable Arbitrum (or Arbitrum-deployed) opportunities such
 Avoid leverage, unaudited farms, and speculative tips. expectedYield must be an integer APY percentage. This is educational, not financial advice.`;
 
 export async function POST(req: Request) {
-  const { messages }: { messages: UIMessage[] } = await req.json();
+  const { messages }: { messages: ModelMessage[] } = await req.json();
 
   const result = streamObject({
     model: DEFAULT_MODEL,
     schema: StrategySchema,
     system: SYSTEM_PROMPT,
-    messages: await convertToModelMessages(messages),
+    messages,
   });
 
-  // Text JSON object stream for the upcoming Generative UI / useObject client.
+  // Text JSON object stream consumed by experimental_useObject / useObject.
   return result.toTextStreamResponse();
 }

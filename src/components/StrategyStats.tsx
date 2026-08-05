@@ -1,7 +1,6 @@
 "use client";
 
-import { Activity, ExternalLink, LoaderCircle, Wallet } from "lucide-react";
-import { useExecuteStrategy } from "@/hooks/useExecuteStrategy";
+import { Activity, LoaderCircle, Wallet } from "lucide-react";
 import { useStrategyState } from "@/hooks/useStrategyState";
 
 function formatCount(value: bigint | undefined, loading: boolean): string {
@@ -18,17 +17,6 @@ export function StrategyStats() {
     isLoadingTotal,
     isLoadingUser,
   } = useStrategyState();
-
-  const {
-    executeStrategy,
-    isConfirming,
-    isWaitingForTx,
-    isSuccess,
-    error,
-    hash,
-  } = useExecuteStrategy();
-
-  const busy = isConfirming || isWaitingForTx;
 
   return (
     <section
@@ -102,48 +90,6 @@ export function StrategyStats() {
             </>
           )}
         </article>
-      </div>
-
-      <div className="border-t border-border bg-secondary px-5 py-4 sm:px-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
-          Temporary write test
-        </p>
-        <button
-          type="button"
-          onClick={() => executeStrategy("Test Strategy", BigInt(500))}
-          disabled={!isConnected || busy}
-          className="mt-3 inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isConfirming
-            ? "Check Wallet…"
-            : isWaitingForTx
-              ? "Mining…"
-              : "Test Execute"}
-        </button>
-
-        {!isConnected && (
-          <p className="mt-2 text-sm text-[var(--accent)]">
-            Connect your wallet on Arbitrum Sepolia to test execution.
-          </p>
-        )}
-
-        {isSuccess && hash && (
-          <a
-            href={`https://sepolia.arbiscan.io/tx/${hash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
-          >
-            Transaction confirmed — View on Arbiscan
-            <ExternalLink className="size-3.5" aria-hidden />
-          </a>
-        )}
-
-        {error && (
-          <p className="mt-2 text-sm text-[var(--danger)]">
-            {error.message ?? "Transaction failed"}
-          </p>
-        )}
       </div>
     </section>
   );

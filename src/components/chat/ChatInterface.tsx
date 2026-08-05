@@ -1,16 +1,15 @@
 "use client";
 
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
-import { LoaderCircle, SendHorizontal, Sparkles } from "lucide-react";
+import { experimental_useObject } from "@ai-sdk/react";
+import { Eraser, LoaderCircle, SendHorizontal, Sparkles } from "lucide-react";
 import {
   useEffect,
-  useMemo,
   useRef,
   useState,
-  type ChangeEvent,
   type FormEvent,
 } from "react";
+import { StrategySchema } from "@/lib/schemas";
+import { StrategyCard } from "./StrategyCard";
 
 const PRESET_PROMPTS = [
   "Find me a low-risk USDC strategy",
@@ -19,50 +18,49 @@ const PRESET_PROMPTS = [
   "Compare two low-risk Arbitrum yield options",
 ] as const;
 
-function messageText(parts: { type: string; text?: string }[]): string {
-  return parts
-    .filter((part) => part.type === "text" && typeof part.text === "string")
-    .map((part) => part.text)
-    .join("");
-}
-
 export function ChatInterface() {
-  const [input, setInput] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [submittedPrompt, setSubmittedPrompt] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const transport = useMemo(
-    () => new DefaultChatTransport({ api: "/api/chat" }),
-    [],
-  );
-
-  const { messages, sendMessage, status, error } = useChat({ transport });
-
-  const isLoading = status === "submitted" || status === "streaming";
+  const { object, submit, isLoading, clear, error } = experimental_useObject({
+    api: "/api/chat",
+    schema: StrategySchema,
+  });
 
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages, isLoading]);
-
-  function handleInputChange(event: ChangeEvent<HTMLInputElement>) {
-    setInput(event.target.value);
-  }
+  }, [object, isLoading, submittedPrompt]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const text = input.trim();
+    const text = prompt.trim();
     if (!text || isLoading) return;
-    void sendMessage({ text });
-    setInput("");
+
+    setSubmittedPrompt(text);
+    submit({
+      messages: [{ role: "user", content: text }],
+    });
+    setPrompt("");
   }
 
-  function applyPreset(prompt: string) {
-    if (isLoading) return;
-    setInput(prompt);
+  function handleClear() {
+    clear();
+    setSubmittedPrompt(null);
+    setPrompt("");
     inputRef.current?.focus();
   }
+
+  function applyPreset(preset: string) {
+    if (isLoading) return;
+    setPrompt(preset);
+    inputRef.current?.focus();
+  }
+
+  const showCard = Boolean(object) || isLoading;
 
   return (
     <section
@@ -80,16 +78,15 @@ export function ChatInterface() {
           Ask ArbiYield AI
         </h2>
         <p className="mt-1 text-sm text-[var(--accent)]">
-          Stream a low-risk Arbitrum yield idea. Structured strategy cards come
-          next.
+          Stream a structured Arbitrum yield strategy into a live StrategyCard.
         </p>
       </header>
 
       <div
         ref={scrollRef}
-        className="flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-4 sm:px-5"
+        className="flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 py-4 sm:px-5"
       >
-        {messages.length === 0 && (
+        {!submittedPrompt && !showCard && (
           <div className="flex h-full min-h-40 flex-col items-center justify-center px-4 text-center">
             <p className="font-display text-2xl tracking-tight text-foreground">
               What yield are you hunting?
@@ -101,39 +98,18 @@ export function ChatInterface() {
           </div>
         )}
 
-        {messages.map((message) => {
-          const isUser = message.role === "user";
-          const text = messageText(message.parts);
-
-          return (
-            <article
-              key={message.id}
-              className={`chat-msg flex ${isUser ? "justify-end" : "justify-start"}`}
-            >
-              <div
-                className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 text-[15px] leading-relaxed sm:max-w-[80%] ${
-                  isUser
-                    ? "rounded-br-md bg-primary text-primary-foreground"
-                    : "rounded-bl-md bg-background text-foreground ring-1 ring-border"
-                }`}
-              >
-                <p className="mb-1 font-mono-explorer text-[10px] font-semibold uppercase tracking-[0.14em] opacity-70">
-                  {isUser ? "You" : "Strategist"}
-                </p>
-                <p className="whitespace-pre-wrap break-words">{text}</p>
-              </div>
-            </article>
-          );
-        })}
-
-        {isLoading && messages[messages.length - 1]?.role === "user" && (
-          <div className="flex justify-start">
-            <div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-md bg-secondary px-3.5 py-2.5 text-sm text-[var(--accent)] ring-1 ring-border">
-              <LoaderCircle className="size-4 animate-spin text-primary" aria-hidden />
-              Thinking…
+        {submittedPrompt && (
+          <article className="chat-msg flex justify-end">
+            <div className="max-w-[88%] rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-[15px] leading-relaxed text-primary-foreground sm:max-w-[80%]">
+              <p className="mb-1 font-mono-explorer text-[10px] font-semibold uppercase tracking-[0.14em] opacity-70">
+                You
+              </p>
+              <p className="whitespace-pre-wrap break-words">{submittedPrompt}</p>
             </div>
-          </div>
+          </article>
         )}
+
+        {showCard && <StrategyCard strategy={object ?? {}} />}
       </div>
 
       <div className="border-t border-border bg-secondary/80 px-3 py-3 backdrop-blur-sm sm:px-5">
@@ -144,16 +120,26 @@ export function ChatInterface() {
           <input
             id="strategy-chat-input"
             ref={inputRef}
-            value={input}
-            onChange={handleInputChange}
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
             disabled={isLoading}
             placeholder="Ask for a low-risk Arbitrum strategy…"
             autoComplete="off"
             className="min-h-11 flex-1 rounded-xl border border-border bg-background px-3.5 text-[15px] text-foreground outline-none ring-primary/40 placeholder:text-[var(--muted)] focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
           />
           <button
+            type="button"
+            onClick={handleClear}
+            disabled={!submittedPrompt && !object && !prompt}
+            className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-3 text-sm font-semibold text-foreground transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Clear strategy"
+          >
+            <Eraser className="size-4" aria-hidden />
+            <span className="hidden sm:inline">Clear</span>
+          </button>
+          <button
             type="submit"
-            disabled={isLoading || !input.trim()}
+            disabled={isLoading || !prompt.trim()}
             className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl bg-primary px-3.5 text-sm font-bold text-primary-foreground transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isLoading ? (
@@ -171,22 +157,23 @@ export function ChatInterface() {
         </form>
 
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {PRESET_PROMPTS.map((prompt) => (
+          {PRESET_PROMPTS.map((preset) => (
             <button
-              key={prompt}
+              key={preset}
               type="button"
-              onClick={() => applyPreset(prompt)}
+              onClick={() => applyPreset(preset)}
               disabled={isLoading}
               className="rounded-xl border border-border bg-background px-3 py-2.5 text-left text-sm leading-snug text-foreground transition hover:border-primary/45 hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {prompt}
+              {preset}
             </button>
           ))}
         </div>
 
         {error && (
           <p className="mt-2 text-sm text-[var(--danger)]">
-            {error.message || "Chat request failed. Check your API key and try again."}
+            {error.message ||
+              "Strategy generation failed. Check your API key and try again."}
           </p>
         )}
       </div>

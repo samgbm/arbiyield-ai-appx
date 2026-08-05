@@ -1,6 +1,14 @@
 "use client";
 
-import { ArrowUpRight, ListOrdered } from "lucide-react";
+import type { DeepPartial } from "ai";
+import {
+  ArrowUpRight,
+  ExternalLink,
+  ListOrdered,
+  LoaderCircle,
+} from "lucide-react";
+import { useAccount } from "wagmi";
+import { useExecuteStrategy } from "@/hooks/useExecuteStrategy";
 import type { Strategy } from "@/lib/schemas";
 
 const riskBadgeStyles: Record<
@@ -13,14 +21,34 @@ const riskBadgeStyles: Record<
   high: "bg-[color-mix(in_oklab,var(--danger)_18%,transparent)] text-[var(--danger)] ring-[color-mix(in_oklab,var(--danger)_35%,transparent)]",
 };
 
-export function StrategyCard({ strategy }: { strategy: Partial<Strategy> }) {
+export function StrategyCard({
+  strategy,
+}: {
+  strategy: DeepPartial<Strategy>;
+}) {
+  const { isConnected } = useAccount();
+  const {
+    executeStrategy,
+    isConfirming,
+    isWaitingForTx,
+    isSuccess,
+    error,
+    hash,
+  } = useExecuteStrategy();
+
+  const strategyName = strategy.strategyName?.trim() ?? "";
   const ready =
-    Boolean(strategy.strategyName?.trim()) &&
-    typeof strategy.expectedYield === "number";
+    Boolean(strategyName) && typeof strategy.expectedYield === "number";
+  const busy = isConfirming || isWaitingForTx;
 
   const steps = strategy.steps?.filter(
     (step): step is string => typeof step === "string" && step.length > 0,
   );
+
+  function handleExecute() {
+    if (!ready || busy || typeof strategy.expectedYield !== "number") return;
+    void executeStrategy(strategyName, BigInt(strategy.expectedYield));
+  }
 
   return (
     <article
@@ -33,7 +61,7 @@ export function StrategyCard({ strategy }: { strategy: Partial<Strategy> }) {
             AI strategy
           </p>
           <h3 className="mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">
-            {strategy.strategyName?.trim() || "Generating Strategy…"}
+            {strategyName || "Generating Strategy…"}
           </h3>
         </div>
 
@@ -107,15 +135,55 @@ export function StrategyCard({ strategy }: { strategy: Partial<Strategy> }) {
       <footer className="border-t border-border px-4 py-4 sm:px-5">
         <button
           type="button"
-          disabled={!ready}
+          onClick={handleExecute}
+          disabled={!ready || !isConnected || busy}
           className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Execute on Arbitrum
-          <ArrowUpRight className="size-4" aria-hidden />
+          {isConfirming ? (
+            <>
+              <LoaderCircle className="size-4 animate-spin" aria-hidden />
+              Check Wallet…
+            </>
+          ) : isWaitingForTx ? (
+            <>
+              <LoaderCircle className="size-4 animate-spin" aria-hidden />
+              Mining…
+            </>
+          ) : (
+            <>
+              Execute on Arbitrum
+              <ArrowUpRight className="size-4" aria-hidden />
+            </>
+          )}
         </button>
+
         {!ready && (
           <p className="mt-2 text-center text-xs text-[var(--muted)]">
             Waiting for name and yield before execution…
+          </p>
+        )}
+
+        {ready && !isConnected && (
+          <p className="mt-2 text-center text-xs text-[var(--accent)]">
+            Connect your wallet on Arbitrum Sepolia to execute.
+          </p>
+        )}
+
+        {isSuccess && hash && (
+          <a
+            href={`https://sepolia.arbiscan.io/tx/${hash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 inline-flex w-full items-center justify-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+          >
+            Transaction confirmed — View on Arbiscan
+            <ExternalLink className="size-3.5" aria-hidden />
+          </a>
+        )}
+
+        {error && (
+          <p className="mt-2 text-center text-sm text-[var(--danger)]">
+            {error.message.split("\n")[0] ?? "Transaction failed"}
           </p>
         )}
       </footer>
