@@ -8,7 +8,8 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { StrategySchema } from "@/lib/schemas";
+import { useDemoMode } from "@/components/providers/DemoModeProvider";
+import { StrategySchema, type Strategy } from "@/lib/schemas";
 import { StrategyCard } from "./StrategyCard";
 import { StrategySkeleton } from "./StrategySkeleton";
 
@@ -19,9 +20,27 @@ const PRESET_PROMPTS = [
   "Compare two low-risk Arbitrum yield options",
 ] as const;
 
+const DEMO_STRATEGY: Partial<Strategy> = {
+  strategyName: "Demo USDC Vault Autocompounder",
+  expectedYield: 15,
+  riskLevel: "low",
+  description:
+    "This is a lightning-fast mock strategy used for live presentations to ensure flawless execution.",
+  steps: [
+    "Supply USDC to Aave",
+    "Borrow ARB",
+    "Provide liquidity to Uniswap V3",
+  ],
+};
+
 export function ChatInterface() {
+  const { isDemoMode } = useDemoMode();
   const [prompt, setPrompt] = useState("");
   const [submittedPrompt, setSubmittedPrompt] = useState<string | null>(null);
+  const [mockStrategy, setMockStrategy] = useState<Partial<Strategy> | null>(
+    null,
+  );
+  const [isMockLoading, setIsMockLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -30,16 +49,35 @@ export function ChatInterface() {
     schema: StrategySchema,
   });
 
+  const busy = isLoading || isMockLoading;
+  const strategy = mockStrategy ?? object;
+  const hasStrategyName = Boolean(strategy?.strategyName?.trim());
+  const showSkeleton = busy && !hasStrategyName;
+  const showCard = hasStrategyName;
+  const showResult = showSkeleton || showCard;
+
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [object, isLoading, submittedPrompt]);
+  }, [strategy, busy, submittedPrompt]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = prompt.trim();
-    if (!text || isLoading) return;
+    if (!text || busy) return;
+
+    if (isDemoMode) {
+      setSubmittedPrompt(text);
+      setMockStrategy(null);
+      setIsMockLoading(true);
+      setPrompt("");
+      window.setTimeout(() => {
+        setIsMockLoading(false);
+        setMockStrategy(DEMO_STRATEGY);
+      }, 1500);
+      return;
+    }
 
     setSubmittedPrompt(text);
     submit({
@@ -50,21 +88,18 @@ export function ChatInterface() {
 
   function handleClear() {
     clear();
+    setMockStrategy(null);
+    setIsMockLoading(false);
     setSubmittedPrompt(null);
     setPrompt("");
     inputRef.current?.focus();
   }
 
   function applyPreset(preset: string) {
-    if (isLoading) return;
+    if (busy) return;
     setPrompt(preset);
     inputRef.current?.focus();
   }
-
-  const hasStrategyName = Boolean(object?.strategyName?.trim());
-  const showSkeleton = isLoading && !hasStrategyName;
-  const showCard = hasStrategyName;
-  const showResult = showSkeleton || showCard;
 
   return (
     <section
@@ -114,7 +149,7 @@ export function ChatInterface() {
         )}
 
         {showSkeleton && <StrategySkeleton />}
-        {showCard && object && <StrategyCard strategy={object} />}
+        {showCard && strategy && <StrategyCard strategy={strategy} />}
       </div>
 
       <div className="border-t border-border bg-secondary/80 px-3 py-3 backdrop-blur-sm sm:px-5">
@@ -127,7 +162,7 @@ export function ChatInterface() {
             ref={inputRef}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            disabled={isLoading}
+            disabled={busy}
             placeholder="Ask for a low-risk Arbitrum strategy…"
             autoComplete="off"
             className="min-h-11 flex-1 rounded-xl border border-border bg-background px-3.5 text-[15px] text-foreground outline-none ring-primary/40 placeholder:text-[var(--muted)] focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
@@ -135,7 +170,7 @@ export function ChatInterface() {
           <button
             type="button"
             onClick={handleClear}
-            disabled={!submittedPrompt && !object && !prompt}
+            disabled={!submittedPrompt && !strategy && !prompt}
             className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-3 text-sm font-semibold text-foreground transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Clear strategy"
           >
@@ -144,10 +179,10 @@ export function ChatInterface() {
           </button>
           <button
             type="submit"
-            disabled={isLoading || !prompt.trim()}
+            disabled={busy || !prompt.trim()}
             className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl bg-primary px-3.5 text-sm font-bold text-primary-foreground transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isLoading ? (
+            {busy ? (
               <>
                 <LoaderCircle className="size-4 animate-spin" aria-hidden />
                 <span className="hidden sm:inline">Streaming</span>
@@ -167,7 +202,7 @@ export function ChatInterface() {
               key={preset}
               type="button"
               onClick={() => applyPreset(preset)}
-              disabled={isLoading}
+              disabled={busy}
               className="rounded-xl border border-border bg-background px-3 py-2.5 text-left text-sm leading-snug text-foreground transition hover:border-primary/45 hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
             >
               {preset}
@@ -175,7 +210,7 @@ export function ChatInterface() {
           ))}
         </div>
 
-        {error && (
+        {error && !isDemoMode && (
           <p className="mt-2 text-sm text-[var(--danger)]">
             {error.message ||
               "Strategy generation failed. Check your API key and try again."}

@@ -1,15 +1,20 @@
 "use client";
 
 import { useAccount, useReadContract } from "wagmi";
+import { useDemoMode } from "@/components/providers/DemoModeProvider";
 import { CONTRACT_ADDRESS, strategyExecutorABI } from "@/lib/contract";
 
 export function useStrategyState() {
+  const { isDemoMode } = useDemoMode();
   const { address } = useAccount();
 
   const totalQuery = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: strategyExecutorABI,
     functionName: "totalStrategiesExecuted",
+    query: {
+      enabled: !isDemoMode,
+    },
   });
 
   const userQuery = useReadContract({
@@ -18,9 +23,20 @@ export function useStrategyState() {
     functionName: "getUserStrategyCount",
     args: address ? [address] : undefined,
     query: {
-      enabled: Boolean(address),
+      enabled: !isDemoMode && Boolean(address),
     },
   });
+
+  if (isDemoMode) {
+    return {
+      totalExecuted: BigInt(1337),
+      userStrategyCount: BigInt(42),
+      isConnected: true,
+      isLoadingTotal: false,
+      isLoadingUser: false,
+      isError: false,
+    };
+  }
 
   return {
     totalExecuted: totalQuery.data,
