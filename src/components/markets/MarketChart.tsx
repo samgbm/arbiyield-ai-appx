@@ -20,6 +20,8 @@ type MarketChartProps = {
   /** Optional seed so each market gets a distinct but deterministic series. */
   seed?: string;
   data?: YesProbabilityPoint[];
+  /** Override the chart chrome subtitle (e.g. "On-chain pools"). */
+  subtitle?: string;
 };
 
 /** Build 24 hourly Yes-probability points (0–100) for demo charts. */
@@ -46,7 +48,11 @@ export function buildMockYesSeries(seed = "default"): YesProbabilityPoint[] {
 /**
  * 24h Yes-probability area chart — neon DeFi aesthetic for the market detail.
  */
-export function MarketChart({ seed = "default", data }: MarketChartProps) {
+export function MarketChart({
+  seed = "default",
+  data,
+  subtitle = "Live demo series",
+}: MarketChartProps) {
   const series = useMemo(
     () => data ?? buildMockYesSeries(seed),
     [data, seed],
@@ -62,7 +68,7 @@ export function MarketChart({ seed = "default", data }: MarketChartProps) {
         <p className="font-mono-explorer text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-300/80">
           Yes probability · 24h
         </p>
-        <p className="text-xs text-slate-400">Live demo series</p>
+        <p className="text-xs text-slate-400">{subtitle}</p>
       </div>
 
       <div className="relative h-56 w-full sm:h-64">
