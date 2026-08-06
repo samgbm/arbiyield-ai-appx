@@ -11,6 +11,7 @@ import {
   type YesProbabilityPoint,
 } from "@/components/markets/MarketChart";
 import { TradePanel } from "@/components/markets/TradePanel";
+import { UserPositions } from "@/components/markets/UserPositions";
 import { mockMarkets, type MockMarket } from "@/data/mockMarkets";
 import { PMM_CONTRACT_ADDRESS, pmmABI } from "@/lib/pmmContract";
 import { useDemoStore } from "@/store/useDemoStore";
@@ -96,11 +97,15 @@ function MarketDetailView({
             />
           </div>
 
-          <aside className="lg:sticky lg:top-24">
+          <aside className="lg:sticky lg:top-24 space-y-0">
             <TradePanel
               marketId={marketId}
               marketTitle={market.title}
               onTradeSuccess={() => onTradeSuccess?.()}
+            />
+            <UserPositions
+              marketId={marketId}
+              onCashoutSuccess={() => onTradeSuccess?.()}
             />
           </aside>
         </div>

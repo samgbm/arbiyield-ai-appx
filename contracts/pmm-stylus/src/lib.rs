@@ -34,6 +34,13 @@ sol! {
         uint256 payout,
         uint256 floor
     );
+    event SharesCashedOut(
+        uint256 indexed marketId,
+        address indexed user,
+        uint8 outcomeId,
+        uint256 shares,
+        uint256 payout
+    );
 }
 
 /// Outcome 0 = No, Outcome 1 = Yes.
@@ -306,6 +313,81 @@ impl MeleePMM {
         Ok(())
     }
 
+    /// Pre-resolution cashout: redeem the caller's shares 1:1 for ETH and
+    /// clear their position (forfeits upside / floor on that outcome).
+    pub fn cashout_shares(
+        &mut self,
+        market_id: U256,
+        outcome_id: u8,
+    ) -> Result<(), Vec<u8>> {
+        require(
+            outcome_id == OUTCOME_NO || outcome_id == OUTCOME_YES,
+            "bad outcome",
+        )?;
+
+        let user = self.vm().msg_sender();
+        let outcome_key = U256::from(outcome_id);
+
+        let (shares, payout) = {
+            let market = self.markets.getter(market_id);
+            require(market.creator.get() != Address::ZERO, "no market")?;
+            require(!market.resolved.get(), "resolved")?;
+
+            let user_positions = market.positions.get(user);
+            let position = user_positions.get(outcome_key);
+            require(!position.claimed.get(), "already claimed")?;
+            let shares = position.shares.get();
+            require(shares > U256::ZERO, "no shares")?;
+
+            // 1:1 mint ⇒ redeem stake; user forgoes resolution upside.
+            let payout = shares;
+            let outcome = market.outcomes.get(outcome_key);
+            let outcome_pool = outcome.pool.get();
+            let outcome_shares = outcome.shares.get();
+            let total = market.total_pool.get();
+            require(outcome_pool >= payout, "pool underflow")?;
+            require(outcome_shares >= shares, "shares underflow")?;
+            require(total >= payout, "total underflow")?;
+
+            (shares, payout)
+        };
+
+        {
+            let mut market = self.markets.setter(market_id);
+
+            let total = market.total_pool.get();
+            market.total_pool.set(total - payout);
+
+            {
+                let mut outcome = market.outcomes.setter(outcome_key);
+                let pool = outcome.pool.get();
+                let o_shares = outcome.shares.get();
+                outcome.pool.set(pool - payout);
+                outcome.shares.set(o_shares - shares);
+            }
+
+            let mut user_positions = market.positions.setter(user);
+            let mut position = user_positions.setter(outcome_key);
+            position.shares.set(U256::ZERO);
+            position.minimum_return_floor.set(U256::ZERO);
+            position.entry_pool_state.set(U256::ZERO);
+        }
+
+        if payout > U256::ZERO {
+            transfer_eth(self.vm(), user, payout)?;
+        }
+
+        self.vm().log(SharesCashedOut {
+            marketId: market_id,
+            user,
+            outcomeId: outcome_id,
+            shares,
+            payout,
+        });
+
+        Ok(())
+    }
+
     /// Claim winnings for the winning outcome.
     /// Payout = max(pro_rata_share_of_total_pool, minimum_return_floor).
     pub fn claim_winnings(&mut self, market_id: U256) -> Result<(), Vec<u8>> {
@@ -479,5 +561,25 @@ mod test {
         let after = c.get_position(id, vm.msg_sender(), OUTCOME_YES);
         assert!(after.3); // claimed
         assert_eq!(after.0, U256::ZERO);
+    }
+
+    #[test]
+    fn cashout_shares_redeems_pre_resolution() {
+        let vm = TestVM::default();
+        let mut c = MeleePMM::from(&vm);
+        let id = c.create_market(future_ts(&vm)).unwrap();
+
+        vm.set_value(U256::from(100));
+        c.buy_shares(id, OUTCOME_YES).unwrap();
+
+        c.cashout_shares(id, OUTCOME_YES).unwrap();
+
+        let (shares, _, floor, _) = c.get_position(id, vm.msg_sender(), OUTCOME_YES);
+        assert_eq!(shares, U256::ZERO);
+        assert_eq!(floor, U256::ZERO);
+
+        let market = c.get_market(id);
+        assert_eq!(market.4, U256::ZERO); // total_pool
+        assert_eq!(market.5, U256::ZERO); // yes pool
     }
 }

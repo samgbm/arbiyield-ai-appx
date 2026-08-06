@@ -104,8 +104,9 @@ export default function CreateMarketPage() {
               What should the world bet on?
             </p>
             <p className="max-w-md text-sm text-[var(--accent)]">
-              Prompt an idea. The strategist will ask for resolution details,
-              then stream a Generative UI deploy card.
+              Prompt an idea. The strategist will ask for title, resolution
+              criteria, category, and end date — then stream a Generative UI
+              deploy card.
             </p>
             <div className="mt-2 grid w-full gap-2 sm:grid-cols-1">
               {SUGGESTIONS.map((suggestion) => (
@@ -128,10 +129,10 @@ export default function CreateMarketPage() {
             className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
           >
             <div
-              className={`max-w-[92%] rounded-2xl px-3.5 py-2.5 sm:max-w-[85%] ${
+              className={`rounded-2xl px-3.5 py-2.5 ${
                 message.role === "user"
-                  ? "rounded-br-md bg-primary text-primary-foreground"
-                  : "w-full rounded-bl-md bg-secondary text-foreground ring-1 ring-border"
+                  ? "max-w-[92%] rounded-br-md bg-primary text-primary-foreground sm:max-w-[85%]"
+                  : "w-full max-w-full rounded-bl-md bg-secondary text-foreground ring-1 ring-border"
               }`}
             >
               <p className="mb-1 font-mono-explorer text-[10px] font-semibold uppercase tracking-[0.14em] opacity-70">

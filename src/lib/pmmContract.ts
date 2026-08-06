@@ -28,6 +28,7 @@ export const pmmABI = parseAbi([
   "function marketCount() view returns (uint256)",
   "function createMarket(uint64 end_timestamp) returns (uint256)",
   "function buyShares(uint256 market_id, uint8 outcome_id) payable",
+  "function cashoutShares(uint256 market_id, uint8 outcome_id)",
   "function resolveMarket(uint256 market_id, uint8 winning_outcome)",
   "function claimWinnings(uint256 market_id)",
   "function getMarket(uint256 market_id) view returns (address, uint256, bool, uint8, uint256, uint256, uint256)",
@@ -36,4 +37,5 @@ export const pmmABI = parseAbi([
   "event SharesBought(uint256 indexed marketId, address indexed buyer, uint8 outcomeId, uint256 amount, uint256 shares, uint256 minimumReturnFloor)",
   "event MarketResolved(uint256 indexed marketId, uint8 winningOutcome)",
   "event WinningsClaimed(uint256 indexed marketId, address indexed claimer, uint256 payout, uint256 floor)",
+  "event SharesCashedOut(uint256 indexed marketId, address indexed user, uint8 outcomeId, uint256 shares, uint256 payout)",
 ]);

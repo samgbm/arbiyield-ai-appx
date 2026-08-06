@@ -24,6 +24,7 @@ const wagmiState = {
 };
 
 jest.mock("wagmi", () => ({
+  useAccount: () => ({ isConnected: true, address: "0x5a967532fd910921f970fCFf449eB95b61C782f4" }),
   useWriteContract: () => ({
     writeContract,
     data: wagmiState.hash,
@@ -36,6 +37,7 @@ jest.mock("wagmi", () => ({
     isSuccess: wagmiState.isSuccess,
     data: wagmiState.receipt,
   }),
+  useReadContract: () => ({ data: undefined }),
   usePublicClient: () => null,
 }));
 
@@ -98,7 +100,7 @@ describe("MarketPreviewCard", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(sample.description)).toBeInTheDocument();
     expect(screen.getByText("Sports")).toBeInTheDocument();
-    expect(screen.getByText(sample.endDate)).toBeInTheDocument();
+    expect(screen.getByText("2030-07-20")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /deploy to arbitrum stylus/i }),
     ).toBeEnabled();

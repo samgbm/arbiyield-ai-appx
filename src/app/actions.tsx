@@ -10,6 +10,7 @@ import { z } from "zod";
 import { openai } from "@/lib/ai";
 import { MarketPreviewCard } from "@/components/markets/MarketPreviewCard";
 import { logger } from "@/lib/logger";
+import { normalizeMarketEndDate } from "@/utils/marketDates";
 
 /**
  * Server messages stored in AI state for multi-turn Market Creator chat.
@@ -25,11 +26,56 @@ export type ClientMessage = {
   display: ReactNode;
 };
 
+const CATEGORIES = ["Crypto", "Culture", "AI", "Sports", "Macro"] as const;
+
 const SYSTEM_PROMPT = `You are the ArbiYield AI Market Creator for Arbitrum prediction markets.
-Help the user define a clear YES/NO market.
-Ask clarifying questions until you have: title, description, category (Crypto|Culture|AI|Sports|Macro), and endDate (ISO-8601 date or datetime).
-When you have all four fields, call the generateMarketCard tool.
-Keep replies concise and pitch-friendly.`;
+
+Help the user define a clear YES/NO market. You MUST collect ALL four fields from the user before calling generateMarketCard:
+
+1. title — a concise YES/NO question (e.g. "Will Brazil win the next FIFA World Cup?")
+2. description — resolution criteria AND a public data source (how it resolves)
+3. category — exactly one of: Crypto | Culture | AI | Sports | Macro
+4. endDate — an explicit future date the user confirms (ISO preferred, e.g. 2026-12-31)
+
+Conversation rules:
+- Ask for missing fields. Prefer 1–2 short questions at a time.
+- Do NOT invent or guess description, category, or endDate.
+- Do NOT call generateMarketCard until the user has supplied (or clearly confirmed) every field above.
+- When all four are present in the conversation, call generateMarketCard once with those exact values.
+- After the tool runs, do not narrate the card — the UI renders it.
+- Keep replies concise and pitch-friendly.`;
+
+function missingMarketFields(input: {
+  title: string;
+  description: string;
+  category: string;
+  endDate: string;
+}): string[] {
+  const missing: string[] = [];
+  const placeholder =
+    /^(tbd|n\/?a|unknown|todo|none|null|undefined|\.+|-+)$/i;
+
+  const title = input.title.trim();
+  const description = input.description.trim();
+  const endDate = input.endDate.trim();
+
+  if (title.length < 8 || placeholder.test(title)) {
+    missing.push("title (a clear YES/NO question)");
+  }
+  if (description.length < 24 || placeholder.test(description)) {
+    missing.push("description (resolution criteria + data source)");
+  }
+  if (
+    !CATEGORIES.includes(input.category as (typeof CATEGORIES)[number])
+  ) {
+    missing.push("category (Crypto, Culture, AI, Sports, or Macro)");
+  }
+  if (!endDate || placeholder.test(endDate) || Number.isNaN(Date.parse(endDate))) {
+    missing.push("endDate (a future date, e.g. 2026-12-31)");
+  }
+
+  return missing;
+}
 
 /**
  * Continues the Market Creator conversation and may stream a Generative UI card.
@@ -55,6 +101,7 @@ export async function submitUserMessage(
     model: openai("gpt-4o"),
     system: SYSTEM_PROMPT,
     messages: history.get() as ServerMessage[],
+    toolChoice: "auto",
     text: ({ content: textContent, done }) => {
       if (done) {
         history.done([
@@ -72,30 +119,66 @@ export async function submitUserMessage(
     tools: {
       generateMarketCard: {
         description:
-          "Render a Generative UI market preview card once title, description, category, and endDate are known.",
+          "Call ONLY after the user has provided title, description, category, and endDate. Never invent missing fields.",
         inputSchema: z.object({
-          title: z.string().describe("Short YES/NO market question"),
+          title: z
+            .string()
+            .min(8)
+            .describe("Short YES/NO market question confirmed by the user"),
           description: z
             .string()
-            .describe("Resolution criteria and data source"),
+            .min(24)
+            .describe(
+              "Resolution criteria and public data source confirmed by the user",
+            ),
           category: z
-            .enum(["Crypto", "Culture", "AI", "Sports", "Macro"])
-            .describe("Market category"),
+            .enum(CATEGORIES)
+            .describe("Market category confirmed by the user"),
           endDate: z
             .string()
-            .describe("ISO-8601 end date/time for market resolution"),
+            .describe(
+              "Future end date confirmed by the user (ISO-8601 preferred)",
+            ),
         }),
         generate: async function* ({
           title,
           description,
           category,
           endDate,
+        }: {
+          title: string;
+          description: string;
+          category: (typeof CATEGORIES)[number];
+          endDate: string;
         }) {
           yield (
             <div className="animate-pulse rounded-xl border border-border bg-secondary px-4 py-3 text-sm text-[var(--muted)]">
-              Drafting market preview card…
+              Checking market details…
             </div>
           );
+
+          const missing = missingMarketFields({
+            title,
+            description,
+            category,
+            endDate,
+          });
+
+          if (missing.length > 0) {
+            const ask = `I still need: ${missing.join("; ")}. Please reply with those details and I’ll generate the deploy card.`;
+            history.done([
+              ...(history.get() as ServerMessage[]),
+              { role: "assistant", content: ask },
+            ]);
+            log.info({ missing }, "Blocked incomplete generateMarketCard call");
+            return (
+              <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                {ask}
+              </div>
+            );
+          }
+
+          const normalizedEnd = normalizeMarketEndDate(endDate);
 
           history.done([
             ...(history.get() as ServerMessage[]),
@@ -106,17 +189,19 @@ export async function submitUserMessage(
           ]);
 
           log.info(
-            { title, category, endDate },
+            { title, category, endDate: normalizedEnd, rawEndDate: endDate },
             "Streaming MarketPreviewCard via generateMarketCard tool",
           );
 
           return (
-            <MarketPreviewCard
-              title={title}
-              description={description}
-              category={category}
-              endDate={endDate}
-            />
+            <div className="w-full min-w-0" data-testid="generative-market-card">
+              <MarketPreviewCard
+                title={title.trim()}
+                description={description.trim()}
+                category={category}
+                endDate={normalizedEnd}
+              />
+            </div>
           );
         },
       },

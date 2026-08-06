@@ -11,12 +11,18 @@ import {
 } from "lucide-react";
 import { parseEventLogs, type Log } from "viem";
 import {
+  useAccount,
   usePublicClient,
+  useReadContract,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
 import { estimateArbitrumSepoliaFees } from "@/lib/gas";
 import { PMM_CONTRACT_ADDRESS, pmmABI } from "@/lib/pmmContract";
+import {
+  endDateToUnixSeconds,
+  normalizeMarketEndDate,
+} from "@/utils/marketDates";
 
 /** Arbitrum Sepolia — avoid importing wagmi/chains (Jest ESM friction). */
 const ARBITRUM_SEPOLIA_CHAIN_ID = 421_614;
@@ -30,14 +36,8 @@ export type MarketPreviewProps = {
 
 const ARBISCAN_TX = "https://sepolia.arbiscan.io/tx";
 
-/** Convert an ISO / date string into UNIX seconds for `createMarket`. */
-export function endDateToUnixSeconds(endDate: string): bigint {
-  const ms = Date.parse(endDate);
-  if (Number.isNaN(ms)) {
-    throw new Error(`Invalid endDate: ${endDate}`);
-  }
-  return BigInt(Math.floor(ms / 1000));
-}
+// Re-export for existing tests / callers.
+export { endDateToUnixSeconds } from "@/utils/marketDates";
 
 function shortTxHash(hash: `0x${string}`) {
   return `${hash.slice(0, 10)}…${hash.slice(-4)}`;
@@ -75,6 +75,7 @@ export function MarketPreviewCard({
   endDate,
 }: MarketPreviewProps) {
   const [localError, setLocalError] = useState<string | null>(null);
+  const { isConnected } = useAccount();
 
   const {
     writeContract,
@@ -94,21 +95,51 @@ export function MarketPreviewCard({
     hash,
   });
 
+  // Fallback id if event logs are missing: newest market is count - 1.
+  const { data: marketCount } = useReadContract({
+    address: PMM_CONTRACT_ADDRESS,
+    abi: pmmABI,
+    functionName: "marketCount",
+    chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+    query: {
+      enabled: isSuccess,
+    },
+  });
+
+  const normalizedEnd = useMemo(
+    () => normalizeMarketEndDate(endDate),
+    [endDate],
+  );
+
   const endTimestamp = useMemo(() => {
     try {
-      return endDateToUnixSeconds(endDate);
+      return endDateToUnixSeconds(normalizedEnd);
     } catch {
       return null;
     }
-  }, [endDate]);
+  }, [normalizedEnd]);
 
-  const marketId = useMemo(
+  const marketIdFromLogs = useMemo(
     () => marketIdFromReceipt(isSuccess, receipt),
     [isSuccess, receipt],
   );
 
+  const marketId = useMemo(() => {
+    if (marketIdFromLogs != null) return marketIdFromLogs;
+    if (!isSuccess || marketCount === undefined) return null;
+    const count = Number(marketCount);
+    if (!Number.isFinite(count) || count <= 0) return null;
+    return String(count - 1);
+  }, [marketIdFromLogs, isSuccess, marketCount]);
+
   async function handleDeploy() {
     setLocalError(null);
+
+    if (!isConnected) {
+      setLocalError("Connect your wallet on Arbitrum Sepolia to deploy.");
+      return;
+    }
+
     if (endTimestamp === null) {
       setLocalError("Invalid end date — cannot deploy.");
       return;
@@ -135,6 +166,7 @@ export function MarketPreviewCard({
       address: PMM_CONTRACT_ADDRESS,
       abi: pmmABI,
       functionName: "createMarket",
+      // Stylus ABI uses uint64 — keep within Number range via seconds timestamp.
       args: [endTimestamp],
       chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
       ...(maxFeePerGas != null
@@ -174,13 +206,15 @@ export function MarketPreviewCard({
           </span>
           <span className="inline-flex items-center gap-1.5 rounded-md bg-background px-2.5 py-1 text-xs font-semibold text-foreground ring-1 ring-border">
             <CalendarClock className="size-3.5 text-primary" aria-hidden />
-            <time dateTime={endDate}>{endDate}</time>
+            <time dateTime={normalizedEnd}>
+              {normalizedEnd.slice(0, 10)}
+            </time>
           </span>
         </div>
 
         <button
           type="button"
-          onClick={handleDeploy}
+          onClick={() => void handleDeploy()}
           disabled={busy || isSuccess || endTimestamp === null}
           data-testid="deploy-button"
           className={
