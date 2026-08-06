@@ -7,6 +7,7 @@ import {
 } from "next/font/google";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { DemoModeProvider } from "@/components/providers/DemoModeProvider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { Web3Provider } from "@/components/providers/Web3Provider";
 import "./globals.css";
@@ -61,11 +62,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="flex min-h-full flex-col font-sans" suppressHydrationWarning>
         <ThemeProvider>
-          <Web3Provider>
-            <Header />
-            <main className="flex-1">{children}</main>
-            <Footer />
-          </Web3Provider>
+          <DemoModeProvider>
+            <Web3Provider>
+              <Header />
+              <main className="flex-1">{children}</main>
+              <Footer />
+            </Web3Provider>
+          </DemoModeProvider>
         </ThemeProvider>
       </body>
     </html>
