@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
-import { useDemoMode } from "@/components/providers/DemoModeProvider";
+import { useDemoStore } from "@/store/useDemoStore";
 
 const ARBITRUM_SEPOLIA_EXPLORER = "https://sepolia.arbiscan.io/";
 
 export function Footer() {
-  const { isDemoMode, toggleDemoMode } = useDemoMode();
+  // Stealth footer toggle stays in sync with Sidebar via Zustand persistence.
+  const isDemoMode = useDemoStore((s) => s.isDemoMode);
+  const toggleDemoMode = useDemoStore((s) => s.toggleDemoMode);
 
   return (
     <footer className="mt-auto border-t border-border bg-secondary pb-[env(safe-area-inset-bottom)]">

@@ -7,9 +7,10 @@ import {
 } from "next/font/google";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
-import { DemoModeProvider } from "@/components/providers/DemoModeProvider";
+import { Sidebar } from "@/components/layout/Sidebar";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { Web3Provider } from "@/components/providers/Web3Provider";
+import "@/env";
 import "./globals.css";
 
 /** Explorer-style UI font (Etherscan / Arbiscan). */
@@ -60,15 +61,19 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
       className={`${roboto.variable} ${robotoMono.variable} ${jakarta.variable} ${instrument.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col font-sans" suppressHydrationWarning>
+      <body className="flex min-h-full font-sans" suppressHydrationWarning>
         <ThemeProvider>
-          <DemoModeProvider>
-            <Web3Provider>
-              <Header />
-              <main className="flex-1">{children}</main>
-              <Footer />
-            </Web3Provider>
-          </DemoModeProvider>
+          <Web3Provider>
+            {/* App shell: fixed Sidebar + scrollable main column */}
+            <div className="flex min-h-full w-full">
+              <Sidebar />
+              <div className="flex min-h-full min-w-0 flex-1 flex-col md:pl-72">
+                <Header />
+                <main className="flex-1 overflow-y-auto">{children}</main>
+                <Footer />
+              </div>
+            </div>
+          </Web3Provider>
         </ThemeProvider>
       </body>
     </html>

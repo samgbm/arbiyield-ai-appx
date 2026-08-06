@@ -1,39 +1,19 @@
 "use client";
 
-import {
-  createContext,
-  useContext,
-  useState,
-  type ReactNode,
-} from "react";
+import type { ReactNode } from "react";
+import { useDemoStore } from "@/store/useDemoStore";
 
-type DemoModeContextValue = {
-  isDemoMode: boolean;
-  toggleDemoMode: () => void;
-};
-
-export const DemoModeContext = createContext<DemoModeContextValue | null>(
-  null,
-);
-
+/**
+ * Compatibility shim: existing hooks call `useDemoMode()`.
+ * State now lives in the persisted Zustand store (`useDemoStore`).
+ */
 export function useDemoMode() {
-  const context = useContext(DemoModeContext);
-  if (!context) {
-    throw new Error("useDemoMode must be used within a DemoModeProvider");
-  }
-  return context;
+  const isDemoMode = useDemoStore((s) => s.isDemoMode);
+  const toggleDemoMode = useDemoStore((s) => s.toggleDemoMode);
+  return { isDemoMode, toggleDemoMode };
 }
 
+/** No-op provider kept so older tests/layouts that wrap children still compile. */
 export function DemoModeProvider({ children }: { children: ReactNode }) {
-  const [isDemoMode, setIsDemoMode] = useState(false);
-
-  function toggleDemoMode() {
-    setIsDemoMode((prev) => !prev);
-  }
-
-  return (
-    <DemoModeContext.Provider value={{ isDemoMode, toggleDemoMode }}>
-      {children}
-    </DemoModeContext.Provider>
-  );
+  return children;
 }

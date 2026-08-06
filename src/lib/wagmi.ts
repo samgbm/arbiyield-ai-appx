@@ -15,6 +15,7 @@ export const arbitrumSepolia = {
 } as typeof arbitrumSepoliaBase;
 
 const rpcUrl =
+  process.env.NEXT_PUBLIC_RPC_URL ||
   process.env.NEXT_PUBLIC_ARBITRUM_RPC_URL ||
   "https://sepolia-rollup.arbitrum.io/rpc";
 

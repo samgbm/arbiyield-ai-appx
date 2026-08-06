@@ -27,7 +27,8 @@
     "react-dom": "19.2.8",
     "viem": "^2.55.10",
     "wagmi": "^2.19.5",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@emnapi/core": "1.11.3",

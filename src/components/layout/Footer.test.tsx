@@ -1,24 +1,15 @@
 import { render, screen } from "@testing-library/react";
-import { DemoModeProvider } from "@/components/providers/DemoModeProvider";
 import { Footer } from "./Footer";
-
-function renderFooter() {
-  return render(
-    <DemoModeProvider>
-      <Footer />
-    </DemoModeProvider>,
-  );
-}
 
 describe("Footer", () => {
   it("renders the copyright text", () => {
-    renderFooter();
+    render(<Footer />);
 
     expect(screen.getByText("© 2026 ArbiYield AI")).toBeInTheDocument();
   });
 
   it("renders a link to the Arbitrum Sepolia Explorer", () => {
-    renderFooter();
+    render(<Footer />);
 
     const link = screen.getByRole("link", {
       name: /arbitrum sepolia explorer/i,
@@ -29,7 +20,7 @@ describe("Footer", () => {
   });
 
   it("renders a stealth demo mode toggle", () => {
-    renderFooter();
+    render(<Footer />);
 
     expect(
       screen.getByRole("button", { name: /enable demo mode/i }),

@@ -17,7 +17,7 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-[color-mix(in_oklab,var(--secondary)_92%,transparent)] pt-[env(safe-area-inset-top)] backdrop-blur-xl">
-      <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:h-16 sm:px-6">
+      <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 pl-14 sm:h-16 sm:px-6 md:pl-6">
         <Link
           href="/"
           className="flex min-h-11 min-w-0 shrink-0 items-center gap-2"
