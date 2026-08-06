@@ -11,7 +11,7 @@ import {
   Landmark,
   Trophy,
 } from "lucide-react";
-import { formatDistanceToNowStrict, isPast, parseISO } from "date-fns";
+import { formatDistanceStrict, parseISO } from "date-fns";
 import type { MockMarket } from "@/data/mockMarkets";
 
 type Category = MockMarket["category"];
@@ -39,8 +39,8 @@ export function getMarketOdds(market: MockMarket) {
 
 export function formatMarketEndLabel(endDate: string, now = new Date()) {
   const end = parseISO(endDate);
-  if (isPast(end)) return "Ended";
-  return `Ends in ${formatDistanceToNowStrict(end, { addSuffix: false })}`;
+  if (end.getTime() <= now.getTime()) return "Ended";
+  return `Ends in ${formatDistanceStrict(end, now)}`;
 }
 
 export function MarketCard({ market }: { market: MockMarket }) {
@@ -49,7 +49,10 @@ export function MarketCard({ market }: { market: MockMarket }) {
   const endLabel = formatMarketEndLabel(market.endDate);
 
   return (
-    <article className="surface flex h-full flex-col overflow-hidden transition hover:border-primary/35">
+    <Link
+      href={`/markets/${market.id}`}
+      className="surface flex h-full flex-col overflow-hidden transition hover:border-primary/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+    >
       <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <span className="inline-flex items-center gap-1.5 rounded-md bg-background px-2.5 py-1 font-mono-explorer text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--accent)] ring-1 ring-border">
@@ -63,13 +66,8 @@ export function MarketCard({ market }: { market: MockMarket }) {
         </div>
 
         <div className="space-y-2">
-          <h2 className="text-lg font-bold leading-snug tracking-tight text-foreground sm:text-xl">
-            <Link
-              href={`/markets/${market.id}`}
-              className="transition hover:text-primary"
-            >
-              {market.title}
-            </Link>
+          <h2 className="text-lg font-bold leading-snug tracking-tight text-foreground transition group-hover:text-primary sm:text-xl">
+            {market.title}
           </h2>
           <p className="line-clamp-2 text-sm leading-relaxed text-[var(--accent)]">
             {market.description}
@@ -96,7 +94,6 @@ export function MarketCard({ market }: { market: MockMarket }) {
             </div>
           </div>
 
-          {/* Odds split bar — widths reflect Yes/No pool share */}
           <div
             className="flex h-2.5 overflow-hidden rounded-full bg-border"
             role="img"
@@ -116,7 +113,7 @@ export function MarketCard({ market }: { market: MockMarket }) {
         </div>
       </div>
 
-      <footer className="flex items-center justify-between gap-3 border-t border-border bg-background/50 px-4 py-3 sm:px-5">
+      <div className="flex items-center justify-between gap-3 border-t border-border bg-background/50 px-4 py-3 sm:px-5">
         <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--accent)]">
           <Droplets className="size-3.5 text-primary" aria-hidden />
           {market.liquidityPool.toLocaleString(undefined, {
@@ -124,13 +121,10 @@ export function MarketCard({ market }: { market: MockMarket }) {
           })}{" "}
           ETH liquidity
         </span>
-        <Link
-          href={`/markets/${market.id}`}
-          className="inline-flex min-h-9 items-center rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground transition hover:brightness-105"
-        >
+        <span className="inline-flex min-h-9 items-center rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground">
           Trade
-        </Link>
-      </footer>
-    </article>
+        </span>
+      </div>
+    </Link>
   );
 }
