@@ -1,66 +1,156 @@
 # ArbiYield AI
 
-**ArbiYield AI** — Arbitrum Scaffold-Stylus + Generative AI Hackathon Project (ETH Lima 2026: Arbitrum & AI).
+**Prompt a yield strategy. Stream a Generative UI card. Sign it onto Arbitrum Stylus.**
 
-Prompt a DeFi yield strategy, get a safe generative UI card (APY, gas, Sign & Execute), then settle on **Arbitrum Sepolia** through a custom **Stylus (Rust/WASM)** contract — with demo-mode fallbacks for live pitches.
+---
 
-## Stack
+## Overview
 
-- Next.js 16 · React 19 · Tailwind CSS v4 · TypeScript
-- next-themes (theme engine)
-- Jest + React Testing Library
-- Arbitrum Stylus (Rust/WASM) · Arbitrum Sepolia
+**ArbiYield AI** is an ETH Lima 2026 hackathon dapp that turns natural-language DeFi intent into an executable on-chain record.
 
-## Demo journey (target)
+Users describe a risk preference and asset (e.g. “low-risk USDC on Arbitrum”). The backend uses **OpenAI** through the **Vercel AI SDK** (`streamObject` + Zod) to stream a strictly typed strategy JSON payload. The frontend renders that stream into a live **StrategyCard** (Generative UI). With one click, the wallet signs `executeStrategy` on our custom **Arbitrum Stylus (Rust/WASM)** contract, permanently recording the strategy name and expected yield on **Arbitrum Sepolia**.
 
-1. **Theme engine** — cycle custom themes instantly (no reload)
-2. **AI prompting** — chat-like intent (“Generate a safe yield strategy for 100 USDC…”)
-3. **Generative UI** — structured JSON → React strategy card + Sign & Execute
-4. **Stylus speed run** — wallet signature → Sepolia confirm → Arbiscan toast link
-5. **Demo mode** — graceful degradation on RPC/wallet/AI failure
+---
 
-## Develop
+## Hackathon Bounties Targeted
+
+### Arbitrum Advanced Bounty — Stylus (Rust Smart Contracts)
+
+We fulfill the **Arbitrum Advanced Bounty** by shipping a custom **Rust** smart contract compiled to WASM with **Arbitrum Stylus `stylus-sdk` v0.10.8**, deployed and activated on **Arbitrum Sepolia**.
+
+| Detail | Value |
+| --- | --- |
+| Contract | `StrategyExecutor` |
+| Address | [`0xdb76e1ca5056c550afcd2084fc571c7fef2e89ae`](https://sepolia.arbiscan.io/address/0xdb76e1ca5056c550afcd2084fc571c7fef2e89ae) |
+| Network | Arbitrum Sepolia |
+| SDK | `stylus-sdk = "0.10.8"` |
+| Source | [`arbi-yield-contract/`](./arbi-yield-contract) |
+
+On-chain surface:
+
+- `executeStrategy(string,uint256)` — write path for AI strategies  
+- `totalStrategiesExecuted()` / `getUserStrategyCount(address)` — live ledger reads  
+- `StrategyExecuted` event — indexed user + strategy metadata  
+
+Deployment / activation:
+
+- Deploy tx: [`0x0b55fef8…`](https://sepolia.arbiscan.io/tx/0x0b55fef85ed6120415e2e76bc00c29e40babb2573c192733e12a030c80153ae2)  
+- Activation tx: [`0xf69a44f4…`](https://sepolia.arbiscan.io/tx/0xf69a44f436cf2dcc5d4a9bcd00c960589069c8615cb371bfcbe01da67cfbaf1e)
+
+---
+
+## Key Features
+
+- **Generative UI** — Zod-validated JSON streams into React (`StrategySkeleton` → `StrategyCard`) via `experimental_useObject`
+- **Rust/WASM via Stylus** — custom `StrategyExecutor` on Arbitrum Sepolia, not a Solidity template
+- **Demo Mode** — stealth footer toggle short-circuits AI + Web3 with perfect mock data for live pitches
+- **16-Theme Custom CSS Engine** — Explorer / Quantum / ETH Lima / Arbiscan themes with instant class-based switching
+- **Production hardening** — Pino structured logs, `/api/health`, Wagmi fee buffering, graceful loading UX
+
+---
+
+## Tech Stack
+
+| Layer | Tools |
+| --- | --- |
+| App | **Next.js** (App Router) · **React 19** · **TypeScript** · **Tailwind CSS v4** |
+| AI | **Vercel AI SDK** · **`@ai-sdk/openai`** · **Zod** structured output |
+| Web3 | **Wagmi v2** · **Viem** · **RainbowKit** · Arbitrum Sepolia |
+| Contracts | **Arbitrum Stylus** · **Rust** · `stylus-sdk` **0.10.8** |
+| Ops | **Pino** logging · Jest · GitHub Actions CI |
+
+---
+
+## Live Links
+
+| Resource | URL |
+| --- | --- |
+| **Production app** | [https://arbiyield-ai-appx.vercel.app/](https://arbiyield-ai-appx.vercel.app/) |
+| **Stylus contract (Arbiscan)** | [https://sepolia.arbiscan.io/address/0xdb76e1ca5056c550afcd2084fc571c7fef2e89ae](https://sepolia.arbiscan.io/address/0xdb76e1ca5056c550afcd2084fc571c7fef2e89ae) |
+| **Contract address** | `0xdb76e1ca5056c550afcd2084fc571c7fef2e89ae` |
+
+---
+
+## Architecture (pitch-ready)
+
+```text
+User prompt
+    │
+    ▼
+POST /api/chat  ──►  OpenAI (gpt-4o-mini) via Vercel AI SDK streamObject
+    │                     Zod StrategySchema enforced
+    ▼
+experimental_useObject  ──►  StrategyCard (Generative UI)
+    │
+    ▼
+wagmi writeContract  ──►  StrategyExecutor (Stylus / Rust WASM)
+    │
+    ▼
+Arbitrum Sepolia ledger + Arbiscan receipt
+```
+
+Fail-safe path: footer **⚡ Demo Mode** → mock AI strategy + simulated tx (no RPC / OpenAI dependency on stage).
+
+---
+
+## Local Setup
+
+### 1. Clone & install
 
 ```bash
+git clone https://github.com/samgbm/arbiyield-ai-appx.git
+cd arbiyield-ai-appx
 npm install
+```
+
+### 2. Environment
+
+Copy `.env.example` → `.env.local` and set:
+
+```bash
+OPENAI_API_KEY=sk-...your-key...
+NEXT_PUBLIC_CONTRACT_ADDRESS=0xdb76e1ca5056c550afcd2084fc571c7fef2e89ae
+NEXT_PUBLIC_ARBITRUM_RPC_URL=https://sepolia-rollup.arbitrum.io/rpc
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_walletconnect_project_id
+```
+
+> Never commit real secrets. Prefer Alchemy / WalletConnect project keys in `.env.local` only.
+
+### 3. Run the app
+
+```bash
 npm run dev
 ```
 
-## Test
+Open [http://localhost:3000](http://localhost:3000).
+
+### 4. Optional checks
 
 ```bash
 npm test
+npm run lint
+curl http://localhost:3000/api/health
 ```
 
-## Build
-
-```bash
-npm run build
-npm start
-```
-
-## Deploy
-
-### Frontend (Vercel)
-
-Vercel-ready Next.js app. Set `NEXT_PUBLIC_CONTRACT_ADDRESS` (see `.env.example`) to the Stylus address below.
-
-### Stylus contract — deployed on Arbitrum Sepolia ✅
-
-Successfully deployed and activated with `cargo stylus deploy`:
-
-| | |
-|---|---|
-| **Contract** | [`0xdb76e1ca5056c550afcd2084fc571c7fef2e89ae`](https://sepolia.arbiscan.io/address/0xdb76e1ca5056c550afcd2084fc571c7fef2e89ae) |
-| **Deployment tx** | [`0x0b55fef85ed6120415e2e76bc00c29e40babb2573c192733e12a030c80153ae2`](https://sepolia.arbiscan.io/tx/0x0b55fef85ed6120415e2e76bc00c29e40babb2573c192733e12a030c80153ae2) |
-| **Activation tx** | [`0xf69a44f436cf2dcc5d4a9bcd00c960589069c8615cb371bfcbe01da67cfbaf1e`](https://sepolia.arbiscan.io/tx/0xf69a44f436cf2dcc5d4a9bcd00c960589069c8615cb371bfcbe01da67cfbaf1e) |
-| **Network** | Arbitrum Sepolia |
-| **WASM data fee** | ~0.000081 ETH (20% bump on estimate) |
-
-Contract source: `arbi-yield-contract/` (`StrategyExecutor`).
+### 5. Stylus contract (optional local verify)
 
 ```bash
 cd arbi-yield-contract
 cargo stylus check --endpoint https://sepolia-rollup.arbitrum.io/rpc
-cargo stylus deploy --endpoint https://sepolia-rollup.arbitrum.io/rpc --private-key <KEY>
 ```
+
+---
+
+## Demo script (3 minutes)
+
+1. Open the [live app](https://arbiyield-ai-appx.vercel.app/) and flip a theme.  
+2. Prompt: *“Find me a low-risk USDC strategy”* — watch skeleton → streamed StrategyCard.  
+3. Connect wallet (Arbitrum Sepolia) → **Execute on Arbitrum** → show Arbiscan tx.  
+4. If anything flakes: tap the stealth **⚡** in the footer → Demo Mode → re-run the same flow flawlessly.  
+5. Point judges at this README + the Stylus contract source under `arbi-yield-contract/`.
+
+---
+
+## License
+
+Private hackathon submission · ETH Lima 2026 · Arbitrum & AI.
