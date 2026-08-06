@@ -154,3 +154,49 @@ cargo stylus check --endpoint https://sepolia-rollup.arbitrum.io/rpc
 ## License
 
 Private hackathon submission · ETH Lima 2026 · Arbitrum & AI.
+
+
+
+# MeleePMM — Parimutuel Market Maker (Arbitrum Stylus)
+
+Single shared Stylus contract hosting many YES/NO markets with **entry-time anti-dilution floors**.
+
+## Anti-dilution
+
+On each `buyShares` deposit:
+
+`minimum_return_floor += amount * total_pool_after / outcome_pool_after`
+
+If that outcome wins, `claimWinnings` pays:
+
+`max(pro_rata_share_of_total_pool, minimum_return_floor)`
+
+Early buyers keep a locked payout floor even when late same-side capital would otherwise dilute classic parimutuel odds. Opposing capital still improves winners’ upside.
+
+## Build & test
+
+```bash
+cd contracts/pmm-stylus
+cargo test --features stylus-test
+cargo build --release --target wasm32-unknown-unknown
+# or: cargo stylus check
+```
+
+## Export Solidity ABI (for Next.js)
+
+```bash
+cd contracts/pmm-stylus
+cargo stylus export-abi
+# equivalent:
+cargo run --features export-abi --target x86_64-unknown-linux-gnu
+```
+
+Copy the printed interface into `src/lib/pmmContract.ts` (`pmmABI`).
+
+## Deploy (Arbitrum Sepolia)
+
+```bash
+cargo stylus deploy --endpoint "$RPC_URL" --private-key "$DEPLOYER_KEY"
+```
+
+Then set `NEXT_PUBLIC_PMM_CONTRACT_ADDRESS` in `.env.local`.
