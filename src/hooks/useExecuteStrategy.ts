@@ -11,6 +11,7 @@ import {
 import { useDemoMode } from "@/components/providers/DemoModeProvider";
 import { chainLogger } from "@/lib/chainLogger";
 import { CONTRACT_ADDRESS, strategyExecutorABI } from "@/lib/contract";
+import { estimateArbitrumSepoliaFees } from "@/lib/gas";
 import { arbitrumSepolia } from "@/lib/wagmi";
 
 const DEMO_TX_HASH =
@@ -117,19 +118,14 @@ export function useExecuteStrategy() {
     let baseFee: bigint | undefined;
 
     if (publicClient) {
-      const fallbackPriority = BigInt(10_000_000);
-      const [block, priorityFee] = await Promise.all([
-        publicClient.getBlock({ blockTag: "latest" }),
-        publicClient
-          .estimateMaxPriorityFeePerGas()
-          .catch(() => fallbackPriority),
-      ]);
-
-      baseFee = block.baseFeePerGas ?? BigInt(20_000_000);
-      const priority =
-        priorityFee > BigInt(0) ? priorityFee : fallbackPriority;
-      maxPriorityFeePerGas = priority;
-      maxFeePerGas = baseFee * BigInt(2) + priority;
+      try {
+        const fees = await estimateArbitrumSepoliaFees(publicClient);
+        baseFee = fees.baseFee;
+        maxFeePerGas = fees.maxFeePerGas;
+        maxPriorityFeePerGas = fees.maxPriorityFeePerGas;
+      } catch {
+        // Fall back to wagmi/wallet defaults if fee estimate fails.
+      }
     }
 
     chainLogger.info(

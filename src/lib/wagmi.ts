@@ -10,7 +10,7 @@ export const arbitrumSepolia = {
   ...arbitrumSepoliaBase,
   fees: {
     ...arbitrumSepoliaBase.fees,
-    baseFeeMultiplier: 2,
+    baseFeeMultiplier: 3,
   },
 } as typeof arbitrumSepoliaBase;
 

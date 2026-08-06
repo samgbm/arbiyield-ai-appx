@@ -55,14 +55,12 @@ function isActivePath(pathname: string, href: string) {
 
 export function Sidebar() {
   const pathname = usePathname();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  // Open only while pathname matches the route when the drawer was opened —
+  // navigating away closes it without a setState-in-effect.
+  const [openedForPath, setOpenedForPath] = useState<string | null>(null);
+  const mobileOpen = openedForPath === pathname;
   const isDemoMode = useDemoStore((s) => s.isDemoMode);
   const toggleDemoMode = useDemoStore((s) => s.toggleDemoMode);
-
-  // Close the drawer on route change (mobile UX).
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
 
   // Prevent background scroll while the mobile drawer is open.
   useEffect(() => {
@@ -91,6 +89,7 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              onClick={() => setOpenedForPath(null)}
               className={`flex min-h-12 items-start gap-3 rounded-xl px-3 py-2.5 transition ${
                 active
                   ? "bg-primary/12 text-foreground ring-1 ring-primary/30"
@@ -150,7 +149,9 @@ export function Sidebar() {
         aria-expanded={mobileOpen}
         aria-controls="app-sidebar"
         aria-label={mobileOpen ? "Close app switcher" : "Open app switcher"}
-        onClick={() => setMobileOpen((open) => !open)}
+        onClick={() =>
+          setOpenedForPath((prev) => (prev === pathname ? null : pathname))
+        }
       >
         {mobileOpen ? <X className="size-5" /> : <Menu className="size-5" />}
       </button>
@@ -161,7 +162,7 @@ export function Sidebar() {
           type="button"
           aria-label="Close app switcher overlay"
           className="fixed inset-0 z-40 bg-black/45 md:hidden"
-          onClick={() => setMobileOpen(false)}
+          onClick={() => setOpenedForPath(null)}
         />
       )}
 

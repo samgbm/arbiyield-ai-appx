@@ -6,7 +6,7 @@ import { parseAbi } from "viem";
  */
 export const PMM_CONTRACT_ADDRESS = (process.env
   .NEXT_PUBLIC_PMM_CONTRACT_ADDRESS ||
-  "0x0000000000000000000000000000000000000000") as `0x${string}`;
+  "0x236c79e9b7e88e2e40d7dbc2f22fd1e6b8040022") as `0x${string}`;
 
 /**
  * Solidity ABI from Stylus export.
