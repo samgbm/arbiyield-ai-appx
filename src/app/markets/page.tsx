@@ -13,6 +13,7 @@ import { useDemoStore } from "@/store/useDemoStore";
  */
 export default function MarketsPage() {
   const isDemoMode = useDemoStore((s) => s.isDemoMode);
+  const createdMarkets = useDemoStore((s) => s.createdMarkets);
 
   return (
     <div className="hero-wash">
@@ -42,7 +43,7 @@ export default function MarketsPage() {
 
         {isDemoMode ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {mockMarkets.map((market) => (
+            {[...createdMarkets, ...mockMarkets].map((market) => (
               <MarketCard key={market.id} market={market} />
             ))}
           </div>

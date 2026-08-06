@@ -6,7 +6,7 @@ describe("useDemoStore", () => {
     // Reset store + persistence between tests so order never leaks state.
     localStorage.clear();
     act(() => {
-      useDemoStore.setState({ isDemoMode: false });
+      useDemoStore.setState({ isDemoMode: false, createdMarkets: [] });
     });
   });
 

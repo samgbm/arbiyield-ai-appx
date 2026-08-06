@@ -7,6 +7,7 @@ import {
   ChartCandlestick,
   LayoutDashboard,
   Menu,
+  Sparkles,
   X,
   Zap,
 } from "lucide-react";
@@ -31,10 +32,24 @@ const NAV_ITEMS = [
     description: "PMM hub · create & trade",
     icon: ChartCandlestick,
   },
+  {
+    href: "/markets/create",
+    label: "Create Market",
+    description: "AI generative deploy card",
+    icon: Sparkles,
+  },
 ] as const;
 
 function isActivePath(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
+  // Keep /markets hub distinct from /markets/create.
+  if (href === "/markets") {
+    return (
+      pathname === "/markets" ||
+      (pathname.startsWith("/markets/") &&
+        !pathname.startsWith("/markets/create"))
+    );
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
