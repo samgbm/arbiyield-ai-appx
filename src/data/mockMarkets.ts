@@ -22,6 +22,9 @@ export type MockMarket = {
   status: "active";
 };
 
+/** Shared frontend market shape (mock + on-chain parsed). */
+export type Market = MockMarket;
+
 export const mockMarkets: MockMarket[] = [
   {
     id: "eth-10k-2026",

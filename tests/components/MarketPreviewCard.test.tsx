@@ -47,9 +47,9 @@ jest.mock("viem", () => {
       {
         eventName: "MarketCreated",
         args: {
-          marketId: 7n,
+          marketId: BigInt(7),
           creator: "0x0000000000000000000000000000000000000001",
-          endTimestamp: 1n,
+          endTimestamp: BigInt(1),
         },
       },
     ]),
