@@ -1,17 +1,12 @@
-//! El Niño Climate Resilience — Arbitrum Stylus core (Increment 3 scaffold)
+//! El Niño Climate Resilience — Arbitrum Stylus core
 //!
 //! Holds parametric farmer insurance policies and immutable aid-logistics
-//! checkpoint hashes. Business logic (batch onboarding, oracle payouts,
-//! logistics append/verify) lands in later increments.
-//!
-//! Storage layout uses Stylus `#[storage]` types (SDK 0.10 equivalent of the
-//! older `sol_storage!` macro). Solidity-style mappings become
-//! `StorageMap<K, V>` over persistent slots.
+//! checkpoint hashes. Increment 4 adds batch farmer registration.
 
 #![cfg_attr(not(any(test, feature = "export-abi")), no_main)]
 extern crate alloc;
 
-use alloc::string::String;
+use alloc::{string::String, vec::Vec};
 
 use alloy_primitives::{Address, B256, U256};
 use stylus_sdk::{
@@ -23,18 +18,7 @@ use stylus_sdk::{
 };
 
 /// Parametric insurance policy for a single farmer (Stylus storage).
-///
-/// Solidity analogue:
-/// ```solidity
-/// struct FarmerPolicy {
-///     address farmerAddress;
-///     string locationId;
-///     uint256 coverageAmount;
-///     bool isActive;
-/// }
-/// ```
 #[storage]
-#[allow(dead_code)] // Wired in Increments 4–5 (batch onboarding / oracle payouts).
 pub struct FarmerPolicy {
     farmer_address: StorageAddress,
     location_id: StorageString,
@@ -43,16 +27,6 @@ pub struct FarmerPolicy {
 }
 
 /// Immutable aid-route checkpoint (Stylus storage).
-///
-/// Solidity analogue:
-/// ```solidity
-/// struct AidCheckpoint {
-///     bytes32 batchHash;
-///     string locationName;
-///     uint256 timestamp;
-///     bool isFlagged;
-/// }
-/// ```
 #[storage]
 #[allow(dead_code)] // Wired in Increment 6 (logistics hashing).
 pub struct AidCheckpoint {
@@ -81,27 +55,62 @@ pub struct AidCheckpointData {
 }
 
 /// El Niño Climate Resilience contract state.
-///
-/// Solidity analogue:
-/// ```solidity
-/// contract ElNinoResilience {
-///     mapping(address => FarmerPolicy) public policies;
-///     mapping(bytes32 => AidCheckpoint) public aidBatches;
-/// }
-/// ```
 #[storage]
 #[entrypoint]
-#[allow(dead_code)] // Public methods land in Increments 4–6.
 pub struct ElNinoResilience {
     /// `mapping(address => FarmerPolicy) policies`
     policies: StorageMap<Address, FarmerPolicy>,
     /// `mapping(bytes32 => AidCheckpoint) aid_batches`
+    #[allow(dead_code)] // Wired in Increment 6.
     aid_batches: StorageMap<B256, AidCheckpoint>,
 }
 
-/// Public ABI surface — intentionally empty until Increments 4–6.
+fn err(msg: &str) -> Vec<u8> {
+    msg.as_bytes().to_vec()
+}
+
+/// External ABI surface (`#[public]` is Stylus SDK 0.10's equivalent of `#[external]`).
 #[public]
-impl ElNinoResilience {}
+impl ElNinoResilience {
+    /// Register many farmers in a single Stylus transaction (Walkthrough 2 / NFR-3).
+    ///
+    /// Parallel arrays must share the same length; each farmer gets an active policy.
+    pub fn batch_register_farmers(
+        &mut self,
+        farmers: Vec<Address>,
+        locations: Vec<String>,
+        coverage_amounts: Vec<U256>,
+    ) -> Result<(), Vec<u8>> {
+        if farmers.len() != locations.len() || farmers.len() != coverage_amounts.len() {
+            return Err(err(
+                "batch_register_farmers: farmers, locations, and coverage_amounts length mismatch",
+            ));
+        }
+
+        for (i, farmer) in farmers.iter().enumerate() {
+            let location = &locations[i];
+            let coverage = coverage_amounts[i];
+
+            let mut policy = self.policies.setter(*farmer);
+            policy.farmer_address.set(*farmer);
+            policy.location_id.set_str(location);
+            policy.coverage_amount.set(coverage);
+            policy.is_active.set(true);
+        }
+
+        Ok(())
+    }
+
+    /// View a farmer's policy as `(location_id, coverage_amount, is_active)`.
+    pub fn get_policy(&self, farmer: Address) -> (String, U256, bool) {
+        let policy = self.policies.getter(farmer);
+        (
+            policy.location_id.get_string(),
+            policy.coverage_amount.get(),
+            policy.is_active.get(),
+        )
+    }
+}
 
 #[cfg(test)]
 mod test {
@@ -115,7 +124,7 @@ mod test {
         let policy = FarmerPolicyData {
             farmer_address: farmer,
             location_id: String::from("PIURA-COOP-01"),
-            coverage_amount: U256::from(500_000_000u64), // 500 USDC (6 decimals)
+            coverage_amount: U256::from(500_000_000u64),
             is_active: true,
         };
 
@@ -137,41 +146,97 @@ mod test {
     }
 
     #[test]
-    fn test_storage_mappings_accept_policy_and_checkpoint() {
+    fn test_batch_register() {
         let vm = TestVM::default();
         let mut contract = ElNinoResilience::from(&vm);
 
-        let farmer = address!("0x2222222222222222222222222222222222222222");
-        {
-            let mut policy = contract.policies.setter(farmer);
-            policy.farmer_address.set(farmer);
-            policy.location_id.set_str("TUMBES-07");
-            policy.coverage_amount.set(U256::from(250_000_000u64));
-            policy.is_active.set(true);
-        }
+        let farmers = alloc::vec![
+            address!("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            address!("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+            address!("0xcccccccccccccccccccccccccccccccccccccccc"),
+        ];
+        let locations = alloc::vec![
+            String::from("PIURA-01"),
+            String::from("TUMBES-02"),
+            String::from("LAMBAYEQUE-03"),
+        ];
+        let coverage_amounts = alloc::vec![
+            U256::from(100_000_000u64),
+            U256::from(200_000_000u64),
+            U256::from(300_000_000u64),
+        ];
 
-        let batch = B256::repeat_byte(0xcd);
-        {
-            let mut checkpoint = contract.aid_batches.setter(batch);
-            checkpoint.batch_hash.set(batch);
-            checkpoint.location_name.set_str("Checkpoint B — Sullana");
-            checkpoint.timestamp.set(U256::from(1_720_000_100u64));
-            checkpoint.is_flagged.set(false);
-        }
+        contract
+            .batch_register_farmers(
+                farmers.clone(),
+                locations.clone(),
+                coverage_amounts.clone(),
+            )
+            .expect("batch register should succeed");
 
-        let policy = contract.policies.getter(farmer);
-        assert_eq!(policy.farmer_address.get(), farmer);
-        assert_eq!(policy.location_id.get_string(), "TUMBES-07");
-        assert_eq!(policy.coverage_amount.get(), U256::from(250_000_000u64));
-        assert!(policy.is_active.get());
+        let (location, coverage, active) = contract.get_policy(farmers[1]);
+        assert_eq!(location, locations[1]);
+        assert_eq!(coverage, coverage_amounts[1]);
+        assert!(active);
 
-        let checkpoint = contract.aid_batches.getter(batch);
-        assert_eq!(checkpoint.batch_hash.get(), batch);
-        assert_eq!(
-            checkpoint.location_name.get_string(),
-            "Checkpoint B — Sullana"
+        // Spot-check the other two slots as well.
+        let (loc0, cov0, active0) = contract.get_policy(farmers[0]);
+        assert_eq!(loc0, "PIURA-01");
+        assert_eq!(cov0, U256::from(100_000_000u64));
+        assert!(active0);
+
+        let (loc2, cov2, active2) = contract.get_policy(farmers[2]);
+        assert_eq!(loc2, "LAMBAYEQUE-03");
+        assert_eq!(cov2, U256::from(300_000_000u64));
+        assert!(active2);
+    }
+
+    #[test]
+    fn test_batch_register_length_mismatch_reverts() {
+        let vm = TestVM::default();
+        let mut contract = ElNinoResilience::from(&vm);
+
+        let err = contract
+            .batch_register_farmers(
+                alloc::vec![address!("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")],
+                alloc::vec![String::from("PIURA-01"), String::from("EXTRA")],
+                alloc::vec![U256::from(1u64)],
+            )
+            .expect_err("mismatched vector lengths must revert");
+
+        assert!(
+            String::from_utf8_lossy(&err).contains("length mismatch"),
+            "unexpected error: {}",
+            String::from_utf8_lossy(&err)
         );
-        assert_eq!(checkpoint.timestamp.get(), U256::from(1_720_000_100u64));
-        assert!(!checkpoint.is_flagged.get());
+    }
+
+    #[test]
+    fn test_batch_register_fifty_farmers() {
+        let vm = TestVM::default();
+        let mut contract = ElNinoResilience::from(&vm);
+
+        let n = 50usize;
+        let mut farmers = Vec::with_capacity(n);
+        let mut locations = Vec::with_capacity(n);
+        let mut coverage_amounts = Vec::with_capacity(n);
+
+        for i in 0..n {
+            let mut bytes = [0u8; 20];
+            bytes[16..].copy_from_slice(&(i as u32).to_be_bytes());
+            farmers.push(Address::from(bytes));
+            locations.push(alloc::format!("ZONE-{i:03}"));
+            coverage_amounts.push(U256::from(1_000_000u64 * (i as u64 + 1)));
+        }
+
+        contract
+            .batch_register_farmers(farmers.clone(), locations.clone(), coverage_amounts.clone())
+            .expect("50-farmer batch should succeed");
+
+        let mid = 25usize;
+        let (location, coverage, active) = contract.get_policy(farmers[mid]);
+        assert_eq!(location, locations[mid]);
+        assert_eq!(coverage, coverage_amounts[mid]);
+        assert!(active);
     }
 }
