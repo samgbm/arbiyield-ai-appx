@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useDeferredValue, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
-import { useReadContract } from "wagmi";
+import { useReadContract, useWatchContractEvent } from "wagmi";
 import { getMarketOdds, formatMarketEndLabel } from "@/components/markets/MarketCard";
 import {
   MarketChart,
@@ -31,6 +31,22 @@ async function fetchMarketMetadata(
 }
 
 const ARBITRUM_SEPOLIA_CHAIN_ID = 421_614;
+
+/** Pulsing badge — shown only in live (non-demo) mode. */
+function LiveIndicator() {
+  return (
+    <span
+      data-testid="live-indicator"
+      className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/12 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-emerald-700 ring-1 ring-emerald-500/35 dark:text-emerald-300"
+    >
+      <span className="relative flex size-2" aria-hidden>
+        <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+        <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+      </span>
+      Live
+    </span>
+  );
+}
 
 /** Build a short series ending at the live Yes probability from pool sizes. */
 function seriesFromLiveOdds(yesPct: number, seed: string): YesProbabilityPoint[] {
@@ -62,6 +78,7 @@ function MarketDetailView({
   endTimestamp,
   onTradeSuccess,
   chartLabel,
+  isLive = false,
 }: {
   market: MockMarket;
   marketId: string;
@@ -72,11 +89,16 @@ function MarketDetailView({
   endTimestamp?: number | bigint;
   onTradeSuccess?: () => void;
   chartLabel?: string;
+  /** Real-time event stream active (non-demo on-chain view). */
+  isLive?: boolean;
 }) {
   const { yesPct } = getMarketOdds(market);
+  const deferredYesPct = useDeferredValue(yesPct);
+  const deferredLiquidity = useDeferredValue(market.liquidityPool);
+
   const chartData = useMemo(
-    () => seriesFromLiveOdds(yesPct, market.id),
-    [yesPct, market.id],
+    () => seriesFromLiveOdds(deferredYesPct, market.id),
+    [deferredYesPct, market.id],
   );
 
   const statusLabel = isResolved
@@ -119,6 +141,7 @@ function MarketDetailView({
                   endTimestamp={resolvedEndTs}
                   isResolved={Boolean(isResolved)}
                 />
+                {isLive ? <LiveIndicator /> : null}
               </div>
               <h1 className="font-display text-3xl tracking-tight text-foreground sm:text-4xl lg:text-5xl">
                 {market.title}
@@ -126,12 +149,24 @@ function MarketDetailView({
               <p className="max-w-2xl text-sm leading-relaxed text-[var(--accent)] sm:text-base">
                 {market.description}
               </p>
-              <p className="text-xs font-semibold text-[var(--muted)]">
+              <p className="text-xs font-semibold text-[var(--muted)] transition-all duration-500 ease-in-out">
                 Liquidity:{" "}
-                {market.liquidityPool.toLocaleString(undefined, {
-                  maximumFractionDigits: 4,
-                })}{" "}
-                ETH · Yes {yesPct.toFixed(1)}% · Status: {statusLabel}
+                <span
+                  data-testid="live-liquidity"
+                  className="tabular-nums text-foreground transition-all duration-500 ease-in-out"
+                >
+                  {deferredLiquidity.toLocaleString(undefined, {
+                    maximumFractionDigits: 4,
+                  })}
+                </span>{" "}
+                ETH · Yes{" "}
+                <span
+                  data-testid="live-yes-odds"
+                  className="tabular-nums text-foreground transition-all duration-500 ease-in-out"
+                >
+                  {deferredYesPct.toFixed(1)}%
+                </span>{" "}
+                · Status: {statusLabel}
                 {chartLabel ? ` · ${chartLabel}` : ""}
               </p>
             </div>
@@ -139,6 +174,7 @@ function MarketDetailView({
             <MarketChart
               seed={market.id}
               data={chartData}
+              currentYesPct={deferredYesPct}
               subtitle={chartLabel ?? "Live demo series"}
             />
           </div>
@@ -167,12 +203,14 @@ function MarketDetailView({
 /**
  * Dynamic market detail — Demo Mode serves mock/created markets;
  * live mode reads `getMarket` from MeleePMM and trades via `buyShares`.
+ * Pool/odds stay fresh via contract event → React Query invalidation.
  */
 export default function MarketDetailPage() {
   const params = useParams<{ id: string }>();
   const id = typeof params.id === "string" ? params.id : params.id?.[0];
   const isDemoMode = useDemoStore((s) => s.isDemoMode);
   const createdMarkets = useDemoStore((s) => s.createdMarkets);
+  const queryClient = useQueryClient();
 
   const numericId = useMemo(() => {
     if (!id) return null;
@@ -202,6 +240,41 @@ export default function MarketDetailPage() {
     queryFn: () => fetchMarketMetadata(id!),
     enabled: !isDemoMode && Boolean(id) && numericId != null,
     staleTime: 15_000,
+  });
+
+  const onPoolChangingLogs = useCallback(
+    (
+      logs: readonly {
+        args?: { marketId?: bigint | number | string };
+      }[],
+    ) => {
+      if (numericId == null) return;
+
+      const touchesThisMarket = logs.some((log) => {
+        const mid = log.args?.marketId;
+        if (mid === undefined) return false;
+        try {
+          return BigInt(mid) === numericId;
+        } catch {
+          return false;
+        }
+      });
+
+      if (!touchesThisMarket) return;
+
+      // Silent background refetch of getMarket / getPosition reads.
+      void queryClient.invalidateQueries({ queryKey: ["readContract"] });
+    },
+    [numericId, queryClient],
+  );
+
+  // SharesBought / MarketResolved / cashouts / claims — any ABI event with marketId.
+  useWatchContractEvent({
+    address: PMM_CONTRACT_ADDRESS,
+    abi: pmmABI,
+    chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+    enabled: !isDemoMode && numericId != null,
+    onLogs: onPoolChangingLogs,
   });
 
   if (isDemoMode) {
@@ -237,6 +310,7 @@ export default function MarketDetailPage() {
         marketId={market.id}
         chartLabel="Demo series"
         isResolved={false}
+        isLive={false}
       />
     );
   }
@@ -354,6 +428,7 @@ export default function MarketDetailPage() {
       winningOutcome={winningOutcome}
       endTimestamp={endTimestamp}
       chartLabel="On-chain pools"
+      isLive
       onTradeSuccess={() => {
         void refetch();
       }}

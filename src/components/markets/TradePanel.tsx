@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { ExternalLink, Info, LoaderCircle, Shield } from "lucide-react";
 import { parseEther } from "viem";
 import {
@@ -97,6 +105,8 @@ export function TradePanel({
   }, [amount]);
 
   const minFloor = calculateMinReturnFloor(parsedAmount);
+  const deferredFloor = useDeferredValue(minFloor);
+  const deferredStake = useDeferredValue(parsedAmount);
   const showFloor = parsedAmount > 0;
   const busy = isPending || isConfirming;
   const canTrade = parsedAmount > 0 && !busy;
@@ -310,14 +320,20 @@ export function TradePanel({
             <p className="text-xs text-[var(--muted)]">
               Side: <span className="font-semibold text-foreground">{side}</span>
             </p>
-            <p className="text-xs text-[var(--muted)]">
+            <p className="text-xs text-[var(--muted)] transition-all duration-500 ease-in-out">
               Stake:{" "}
-              <span className="font-semibold text-foreground">
-                {parsedAmount.toFixed(4)} ETH
+              <span
+                data-testid="trade-stake"
+                className="font-semibold tabular-nums text-foreground transition-all duration-500 ease-in-out"
+              >
+                {deferredStake.toFixed(4)} ETH
               </span>
             </p>
-            <p className="text-lg font-bold tracking-tight text-primary">
-              Min return floor: {minFloor.toFixed(4)} ETH
+            <p
+              data-testid="trade-min-floor"
+              className="text-lg font-bold tracking-tight text-primary tabular-nums transition-all duration-500 ease-in-out"
+            >
+              Min return floor: {deferredFloor.toFixed(4)} ETH
             </p>
             <p className="text-[11px] text-[var(--muted)]">
               Preview formula: bet × {MIN_RETURN_FLOOR_MULTIPLIER} (exact floor

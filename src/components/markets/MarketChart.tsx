@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useDeferredValue, useMemo } from "react";
 import {
   Area,
   AreaChart,
@@ -22,6 +22,8 @@ type MarketChartProps = {
   data?: YesProbabilityPoint[];
   /** Override the chart chrome subtitle (e.g. "On-chain pools"). */
   subtitle?: string;
+  /** Latest Yes odds % — deferred for smooth live updates. */
+  currentYesPct?: number;
 };
 
 /** Build 24 hourly Yes-probability points (0–100) for demo charts. */
@@ -52,11 +54,16 @@ export function MarketChart({
   seed = "default",
   data,
   subtitle = "Live demo series",
+  currentYesPct,
 }: MarketChartProps) {
   const series = useMemo(
     () => data ?? buildMockYesSeries(seed),
     [data, seed],
   );
+
+  const livePct =
+    currentYesPct ?? series[series.length - 1]?.yesProbability ?? 50;
+  const deferredPct = useDeferredValue(livePct);
 
   return (
     <div className="relative overflow-hidden rounded-[var(--radius-panel)] border border-border bg-[#070b14] p-3 shadow-[0_0_40px_color-mix(in_oklab,#22d3ee_12%,transparent)] sm:p-4">
@@ -68,7 +75,15 @@ export function MarketChart({
         <p className="font-mono-explorer text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-300/80">
           Yes probability · 24h
         </p>
-        <p className="text-xs text-slate-400">{subtitle}</p>
+        <div className="flex items-center gap-3">
+          <p
+            data-testid="chart-live-yes-pct"
+            className="font-mono-explorer text-sm font-bold tabular-nums text-cyan-300 transition-all duration-500 ease-in-out"
+          >
+            {deferredPct.toFixed(1)}%
+          </p>
+          <p className="text-xs text-slate-400">{subtitle}</p>
+        </div>
       </div>
 
       <div className="relative h-56 w-full sm:h-64">
@@ -123,6 +138,9 @@ export function MarketChart({
               stroke="#22d3ee"
               strokeWidth={2.5}
               fill="url(#yesGlow)"
+              isAnimationActive
+              animationDuration={500}
+              animationEasing="ease-in-out"
               activeDot={{
                 r: 5,
                 fill: "#67e8f9",
