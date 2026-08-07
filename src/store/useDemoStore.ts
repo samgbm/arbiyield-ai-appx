@@ -6,18 +6,19 @@ import type { MockMarket } from "@/data/mockMarkets";
 
 /**
  * Global Demo Mode fail-safe (Zustand + localStorage persistence).
+ * Propagates across Yield, Prediction Markets, and El Niño modules.
  * Also holds locally "deployed" AI-created markets for pitch demos.
  */
-type DemoState = {
+export interface DemoStore {
   isDemoMode: boolean;
   /** Markets added via AI Market Creator deploy (demo fallback). */
   createdMarkets: MockMarket[];
   toggleDemoMode: () => void;
   setDemoMode: (value: boolean) => void;
   addCreatedMarket: (market: MockMarket) => void;
-};
+}
 
-export const useDemoStore = create<DemoState>()(
+export const useDemoStore = create<DemoStore>()(
   persist(
     (set) => ({
       isDemoMode: false,

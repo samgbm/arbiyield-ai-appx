@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Menu, X } from "lucide-react";
+import { DemoModeToggle } from "@/components/layout/DemoModeToggle";
 import { ThemeSwitcher } from "@/components/theme/theme-switcher";
 
 const NAV_LINKS = [
@@ -50,6 +51,8 @@ export function Header() {
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+          <DemoModeToggle />
+
           <div className="hidden sm:block">
             <ThemeSwitcher />
           </div>
@@ -98,6 +101,12 @@ export function Header() {
               </Link>
             ))}
           </nav>
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">
+              Demo
+            </span>
+            <DemoModeToggle />
+          </div>
           <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3 sm:hidden">
             <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">
               Theme
