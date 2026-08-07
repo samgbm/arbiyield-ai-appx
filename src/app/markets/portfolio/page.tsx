@@ -171,33 +171,30 @@ export default function PortfolioPage() {
   // Per market: getMarket + getPosition(No) + getPosition(Yes)
   const contracts = useMemo(() => {
     if (!address || marketIds.length === 0) return [];
-    const calls: {
-      address: typeof PMM_CONTRACT_ADDRESS;
-      abi: typeof pmmABI;
-      functionName: "getMarket" | "getPosition";
-      args: readonly unknown[];
-      chainId: number;
-    }[] = [];
 
-    for (const marketId of marketIds) {
-      calls.push({
+    return marketIds.flatMap((marketId) => [
+      {
         address: PMM_CONTRACT_ADDRESS,
         abi: pmmABI,
-        functionName: "getMarket",
+        functionName: "getMarket" as const,
         args: [marketId] as const,
         chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
-      });
-      for (const outcomeId of [OUTCOME_NO, OUTCOME_YES]) {
-        calls.push({
-          address: PMM_CONTRACT_ADDRESS,
-          abi: pmmABI,
-          functionName: "getPosition",
-          args: [marketId, address as Address, outcomeId] as const,
-          chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
-        });
-      }
-    }
-    return calls;
+      },
+      {
+        address: PMM_CONTRACT_ADDRESS,
+        abi: pmmABI,
+        functionName: "getPosition" as const,
+        args: [marketId, address as Address, OUTCOME_NO] as const,
+        chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+      },
+      {
+        address: PMM_CONTRACT_ADDRESS,
+        abi: pmmABI,
+        functionName: "getPosition" as const,
+        args: [marketId, address as Address, OUTCOME_YES] as const,
+        chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+      },
+    ]);
   }, [address, marketIds]);
 
   const {
@@ -216,7 +213,16 @@ export default function PortfolioPage() {
   });
 
   const livePositions = useMemo(() => {
-    if (!multicallResults?.length || marketIds.length === 0) {
+    // Mixed getMarket/getPosition calls widen wagmi inference to `never` —
+    // read results through a narrow runtime shape instead.
+    type CallResult =
+      | { status: "success"; result: unknown }
+      | { status: "failure"; error?: Error }
+      | undefined;
+
+    const results = (multicallResults ?? []) as CallResult[];
+
+    if (!results.length || marketIds.length === 0) {
       return [] as LivePortfolioRow[];
     }
 
@@ -224,9 +230,9 @@ export default function PortfolioPage() {
 
     for (let i = 0; i < marketIds.length; i++) {
       const base = i * 3;
-      const marketResult = multicallResults[base];
-      const noResult = multicallResults[base + 1];
-      const yesResult = multicallResults[base + 2];
+      const marketResult = results[base];
+      const noResult = results[base + 1];
+      const yesResult = results[base + 2];
       const marketId = Number(marketIds[i]);
       const meta = metaById.get(marketId);
 
@@ -246,10 +252,13 @@ export default function PortfolioPage() {
       const isResolved = Boolean(raw[2]);
       const winningOutcome = Number(raw[3]);
 
-      const sides = [
+      const sides: {
+        outcomeId: number;
+        result: CallResult;
+      }[] = [
         { outcomeId: OUTCOME_NO, result: noResult },
         { outcomeId: OUTCOME_YES, result: yesResult },
-      ] as const;
+      ];
 
       for (const side of sides) {
         if (side.result?.status !== "success" || side.result.result == null) {
