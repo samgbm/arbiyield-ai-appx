@@ -2,16 +2,33 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
-import { useReadContract, useReadContracts } from "wagmi";
+import { useReadContracts } from "wagmi";
 import { MarketCard } from "@/components/markets/MarketCard";
 import { mockMarkets, type MockMarket } from "@/data/mockMarkets";
+import type { MarketMetadataRow } from "@/lib/supabaseClient";
 import { PMM_CONTRACT_ADDRESS, pmmABI } from "@/lib/pmmContract";
 import { useDemoStore } from "@/store/useDemoStore";
-import { parseOnChainMarket } from "@/utils/marketParser";
+import {
+  metadataById,
+  parseOnChainMarket,
+} from "@/utils/marketParser";
 
 /** Arbitrum Sepolia — keep reads on the Stylus deployment chain. */
 const ARBITRUM_SEPOLIA_CHAIN_ID = 421_614;
+
+async function fetchAllMarketMetadata(): Promise<MarketMetadataRow[]> {
+  const res = await fetch("/api/markets/metadata");
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as {
+      error?: string;
+    } | null;
+    throw new Error(body?.error ?? `Failed to load metadata (${res.status})`);
+  }
+  const data: unknown = await res.json();
+  return Array.isArray(data) ? (data as MarketMetadataRow[]) : [];
+}
 
 function MarketsSkeleton() {
   return (
@@ -88,32 +105,38 @@ function MarketsGrid({ markets }: { markets: MockMarket[] }) {
 /**
  * Prediction Markets hub.
  * Demo Mode → mock marketplace for pitches.
- * Live Mode → multicall `getMarket` over Arbitrum Sepolia Stylus PMM.
+ * Live Mode → Supabase metadata + multicall `getMarket` financial state.
  */
 export default function MarketsPage() {
   const isDemoMode = useDemoStore((s) => s.isDemoMode);
   const createdMarkets = useDemoStore((s) => s.createdMarkets);
 
   const {
-    data: marketCount,
-    isLoading: isCountLoading,
-    isFetching: isCountFetching,
-  } = useReadContract({
-    address: PMM_CONTRACT_ADDRESS,
-    abi: pmmABI,
-    functionName: "marketCount",
-    chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
-    query: {
-      enabled: !isDemoMode,
-    },
+    data: metadataRows,
+    isLoading: isMetaLoading,
+    isFetching: isMetaFetching,
+    isError: isMetaError,
+    error: metaError,
+  } = useQuery({
+    queryKey: ["market-metadata"],
+    queryFn: fetchAllMarketMetadata,
+    enabled: !isDemoMode,
+    staleTime: 15_000,
   });
 
+  const metaMap = useMemo(
+    () => metadataById(metadataRows ?? []),
+    [metadataRows],
+  );
+
+  // Supabase IDs drive which on-chain markets we multicall.
   const marketIds = useMemo(() => {
-    if (marketCount === undefined) return [];
-    const count = Number(marketCount);
-    if (!Number.isFinite(count) || count <= 0) return [];
-    return Array.from({ length: count }, (_, i) => BigInt(i));
-  }, [marketCount]);
+    if (!metadataRows?.length) return [] as bigint[];
+    return metadataRows
+      .map((row) => Number(row.id))
+      .filter((id) => Number.isInteger(id) && id >= 0)
+      .map((id) => BigInt(id));
+  }, [metadataRows]);
 
   const {
     data: marketsResults,
@@ -133,33 +156,37 @@ export default function MarketsPage() {
   });
 
   const onChainMarkets = useMemo(() => {
-    if (!marketsResults?.length) return [];
+    if (!marketsResults?.length || !marketIds.length) return [];
     const parsed: MockMarket[] = [];
     for (let i = 0; i < marketsResults.length; i++) {
       const result = marketsResults[i];
+      const id = Number(marketIds[i]);
       if (result.status !== "success" || result.result == null) continue;
       try {
-        parsed.push(parseOnChainMarket(i, result.result));
+        parsed.push(
+          parseOnChainMarket(id, result.result, metaMap.get(id) ?? null),
+        );
       } catch {
         // Skip malformed rows rather than blanking the hub.
       }
     }
-    // Newest first (higher ids at the top).
-    return parsed.reverse();
-  }, [marketsResults]);
+    // Newest first (higher ids at the top) — metadata query already orders desc,
+    // but reverse-sort defensively in case row order drifts.
+    return parsed.sort((a, b) => Number(b.id) - Number(a.id));
+  }, [marketsResults, marketIds, metaMap]);
 
   const isLoading =
     !isDemoMode &&
-    (isCountLoading ||
-      isCountFetching ||
+    (isMetaLoading ||
+      isMetaFetching ||
       (marketIds.length > 0 && (isMarketsLoading || isMarketsFetching)));
 
   const demoMarkets = [...createdMarkets, ...mockMarkets];
-  const countIsZero =
+  const isEmpty =
     !isDemoMode &&
-    marketCount !== undefined &&
-    Number(marketCount) === 0 &&
-    !isLoading;
+    !isLoading &&
+    !isMetaError &&
+    marketIds.length === 0;
 
   return (
     <div className="hero-wash">
@@ -191,7 +218,16 @@ export default function MarketsPage() {
           <MarketsGrid markets={demoMarkets} />
         ) : isLoading ? (
           <MarketsSkeleton />
-        ) : countIsZero ? (
+        ) : isMetaError ? (
+          <div
+            data-testid="markets-meta-error"
+            className="surface px-6 py-10 text-center text-sm font-semibold text-[var(--danger)]"
+          >
+            {metaError instanceof Error
+              ? metaError.message
+              : "Failed to load market metadata from Supabase."}
+          </div>
+        ) : isEmpty ? (
           <EmptyMarkets />
         ) : (
           <MarketsGrid markets={onChainMarkets} />

@@ -18,6 +18,21 @@ export type OnChainMarketRaw = readonly [
   noPool: bigint | number | string,
 ];
 
+/** Off-chain text fields from Supabase (or the metadata API). */
+export type MarketMetadataOverlay = {
+  title?: string;
+  description?: string;
+  category?: string;
+};
+
+const CATEGORIES = new Set([
+  "Crypto",
+  "Culture",
+  "AI",
+  "Sports",
+  "Macro",
+]);
+
 function toBigInt(value: bigint | number | string): bigint {
   if (typeof value === "bigint") return value;
   if (typeof value === "number") return BigInt(Math.trunc(value));
@@ -46,12 +61,23 @@ function isOnChainMarketRaw(value: unknown): value is OnChainMarketRaw {
   return Array.isArray(value) && value.length >= 7;
 }
 
+function normalizeCategory(
+  category: string | undefined,
+): MockMarket["category"] {
+  if (category && CATEGORIES.has(category)) {
+    return category as MockMarket["category"];
+  }
+  return "Crypto";
+}
+
 /**
  * Map a Stylus `getMarket` tuple into the frontend `MockMarket` / `Market` shape.
+ * Optional Supabase metadata supplies title / description / category.
  */
 export function parseOnChainMarket(
   id: number,
   rawData: OnChainMarketRaw | unknown,
+  metadata?: MarketMetadataOverlay | null,
 ): Market {
   if (!isOnChainMarketRaw(rawData)) {
     throw new Error(`Unexpected getMarket payload for market ${id}`);
@@ -65,13 +91,19 @@ export function parseOnChainMarket(
   const noAmount = Number(formatEther(toBigInt(noPool)));
   const liquidityPool = Number(formatEther(toBigInt(totalPool)));
 
+  const fallbackDescription = resolved
+    ? `Resolved on-chain MeleePMM market created by ${shortAddress(String(creator))}.`
+    : `On-chain MeleePMM market created by ${shortAddress(String(creator))}. Open for Yes/No trading with anti-dilution floors.`;
+
+  const title = metadata?.title?.trim() || `Market #${id}`;
+  const description =
+    metadata?.description?.trim() || fallbackDescription;
+
   return {
     id: String(id),
-    title: `Market #${id}`,
-    description: resolved
-      ? `Resolved on-chain MeleePMM market created by ${shortAddress(String(creator))}.`
-      : `On-chain MeleePMM market created by ${shortAddress(String(creator))}. Open for Yes/No trading with anti-dilution floors.`,
-    category: "Crypto",
+    title,
+    description,
+    category: normalizeCategory(metadata?.category),
     liquidityPool,
     endDate,
     options: [
@@ -80,4 +112,26 @@ export function parseOnChainMarket(
     ],
     status: "active",
   };
+}
+
+/** Index Supabase rows by on-chain market id. */
+export function metadataById(
+  rows: Array<{
+    id: number | string;
+    title?: string;
+    description?: string;
+    category?: string;
+  }>,
+): Map<number, MarketMetadataOverlay> {
+  const map = new Map<number, MarketMetadataOverlay>();
+  for (const row of rows) {
+    const id = Number(row.id);
+    if (!Number.isInteger(id) || id < 0) continue;
+    map.set(id, {
+      title: row.title,
+      description: row.description,
+      category: row.category,
+    });
+  }
+  return map;
 }

@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { useReadContract } from "wagmi";
 import { getMarketOdds, formatMarketEndLabel } from "@/components/markets/MarketCard";
@@ -15,9 +16,19 @@ import { MarketEndCountdown } from "@/components/markets/MarketEndCountdown";
 import { TradePanel } from "@/components/markets/TradePanel";
 import { UserPositions } from "@/components/markets/UserPositions";
 import { mockMarkets, type MockMarket } from "@/data/mockMarkets";
+import type { MarketMetadataRow } from "@/lib/supabaseClient";
 import { PMM_CONTRACT_ADDRESS, pmmABI } from "@/lib/pmmContract";
 import { useDemoStore } from "@/store/useDemoStore";
 import { parseOnChainMarket } from "@/utils/marketParser";
+
+async function fetchMarketMetadata(
+  id: string,
+): Promise<MarketMetadataRow | null> {
+  const res = await fetch(`/api/markets/metadata?id=${encodeURIComponent(id)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) return null;
+  return (await res.json()) as MarketMetadataRow;
+}
 
 const ARBITRUM_SEPOLIA_CHAIN_ID = 421_614;
 
@@ -186,6 +197,13 @@ export default function MarketDetailPage() {
     },
   });
 
+  const { data: metadata } = useQuery({
+    queryKey: ["market-metadata", id],
+    queryFn: () => fetchMarketMetadata(id!),
+    enabled: !isDemoMode && Boolean(id) && numericId != null,
+    staleTime: 15_000,
+  });
+
   if (isDemoMode) {
     const market =
       createdMarkets.find((m) => m.id === id) ??
@@ -325,7 +343,7 @@ export default function MarketDetailPage() {
   const endTimestamp = rawMarket[1];
   const isResolved = Boolean(rawMarket[2]);
   const winningOutcome = Number(rawMarket[3]);
-  const market = parseOnChainMarket(Number(id), rawMarket);
+  const market = parseOnChainMarket(Number(id), rawMarket, metadata ?? null);
 
   return (
     <MarketDetailView

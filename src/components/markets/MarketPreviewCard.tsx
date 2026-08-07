@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   CalendarClock,
@@ -78,7 +78,11 @@ export function MarketPreviewCard({
   endDate,
 }: MarketPreviewProps) {
   const [localError, setLocalError] = useState<string | null>(null);
-  const { isConnected } = useAccount();
+  const [metadataStatus, setMetadataStatus] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  const metadataPostedFor = useRef<string | null>(null);
+  const { isConnected, address } = useAccount();
 
   const {
     writeContract,
@@ -141,6 +145,54 @@ export function MarketPreviewCard({
     if (!Number.isFinite(count) || count <= 0) return null;
     return String(count - 1);
   }, [marketIdFromLogs, isSuccess, marketCount]);
+
+  // Persist AI text off-chain once createMarket confirms + we have an id.
+  useEffect(() => {
+    if (!isSuccess || marketId == null || !address) return;
+    if (metadataPostedFor.current === marketId) return;
+
+    let cancelled = false;
+    setMetadataStatus("saving");
+
+    void (async () => {
+      try {
+        const res = await fetch("/api/markets/metadata", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: Number(marketId),
+            title,
+            description,
+            category,
+            creator_address: address,
+          }),
+        });
+
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as {
+            error?: string;
+          } | null;
+          throw new Error(body?.error ?? `Metadata save failed (${res.status})`);
+        }
+
+        if (cancelled) return;
+        metadataPostedFor.current = marketId;
+        setMetadataStatus("saved");
+      } catch (err) {
+        if (cancelled) return;
+        setMetadataStatus("error");
+        setLocalError(
+          err instanceof Error
+            ? `On-chain deploy succeeded, but metadata save failed: ${err.message}`
+            : "On-chain deploy succeeded, but metadata save failed.",
+        );
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSuccess, marketId, address, title, description, category]);
 
   async function handleDeploy() {
     setLocalError(null);
@@ -302,6 +354,23 @@ export function MarketPreviewCard({
               >
                 Open market #{marketId}
               </Link>
+            )}
+
+            {metadataStatus === "saving" && (
+              <p
+                data-testid="metadata-saving"
+                className="text-xs font-semibold text-[var(--muted)]"
+              >
+                Saving title & description to Supabase…
+              </p>
+            )}
+            {metadataStatus === "saved" && (
+              <p
+                data-testid="metadata-saved"
+                className="text-xs font-semibold text-emerald-700 dark:text-emerald-300"
+              >
+                Metadata saved off-chain
+              </p>
             )}
           </div>
         )}

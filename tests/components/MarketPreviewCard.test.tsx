@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MarketPreviewCard } from "@/components/markets/MarketPreviewCard";
 import { PMM_CONTRACT_ADDRESS, pmmABI } from "@/lib/pmmContract";
@@ -88,6 +88,15 @@ function resetWagmi() {
 describe("MarketPreviewCard", () => {
   beforeEach(() => {
     resetWagmi();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ id: 7 }),
+    }) as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it("renders market preview props", () => {
@@ -172,5 +181,23 @@ describe("MarketPreviewCard", () => {
       "href",
       "/markets/7",
     );
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/api/markets/metadata",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            id: 7,
+            title: sample.title,
+            description: sample.description,
+            category: sample.category,
+            creator_address: "0x5a967532fd910921f970fCFf449eB95b61C782f4",
+          }),
+        }),
+      );
+    });
+
+    expect(await screen.findByTestId("metadata-saved")).toBeInTheDocument();
   });
 });

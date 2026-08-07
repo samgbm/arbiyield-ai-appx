@@ -16,10 +16,14 @@ const envSchema = z.object({
   NEXT_PUBLIC_RPC_URL: z
     .string()
     .url("NEXT_PUBLIC_RPC_URL must be a valid URL"),
-  /** Supabase project URL for off-chain market metadata (Phase 4). */
+  /** Supabase project URL for off-chain market metadata. */
   NEXT_PUBLIC_SUPABASE_URL: z
     .string()
     .url("NEXT_PUBLIC_SUPABASE_URL must be a valid URL"),
+  /** Supabase anon key (public) for metadata reads/writes via RLS. */
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z
+    .string()
+    .min(1, "NEXT_PUBLIC_SUPABASE_ANON_KEY is required"),
   /** OpenAI key for strategy + market-creator AI routes (server-only). */
   OPENAI_API_KEY: z.string().min(1, "OPENAI_API_KEY is required"),
 });
@@ -40,6 +44,8 @@ function validateEnv(): Env {
       NEXT_PUBLIC_SUPABASE_URL:
         process.env.NEXT_PUBLIC_SUPABASE_URL ??
         "https://placeholder.supabase.co",
+      NEXT_PUBLIC_SUPABASE_ANON_KEY:
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "test-anon-key",
       OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "missing",
     };
   }
@@ -50,6 +56,7 @@ function validateEnv(): Env {
       process.env.NEXT_PUBLIC_RPC_URL ??
       process.env.NEXT_PUBLIC_ARBITRUM_RPC_URL,
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   });
 
