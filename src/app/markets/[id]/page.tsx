@@ -126,6 +126,8 @@ function MarketDetailView({
             creatorAddress={creatorAddress}
             isResolved={Boolean(isResolved)}
             endTimestamp={resolvedEndTs}
+            title={market.title}
+            description={market.description}
             onResolved={() => onTradeSuccess?.()}
           />
         ) : null}

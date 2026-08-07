@@ -26,6 +26,8 @@ const envSchema = z.object({
     .min(1, "NEXT_PUBLIC_SUPABASE_ANON_KEY is required"),
   /** OpenAI key for strategy + market-creator AI routes (server-only). */
   OPENAI_API_KEY: z.string().min(1, "OPENAI_API_KEY is required"),
+  /** Tavily key for AI Oracle web search (`/api/markets/resolve`). */
+  TAVILY_API_KEY: z.string().min(1, "TAVILY_API_KEY is required"),
   /**
    * Optional hex private key for `npm run seed` (Arbitrum Sepolia seeder).
    * Not required at app runtime — validated when present so .env stays typed.
@@ -58,6 +60,7 @@ function validateEnv(): Env {
       NEXT_PUBLIC_SUPABASE_ANON_KEY:
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "test-anon-key",
       OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "missing",
+      TAVILY_API_KEY: process.env.TAVILY_API_KEY ?? "missing",
     };
   }
 
@@ -69,6 +72,7 @@ function validateEnv(): Env {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    TAVILY_API_KEY: process.env.TAVILY_API_KEY,
     SEEDER_PRIVATE_KEY: process.env.SEEDER_PRIVATE_KEY || undefined,
   });
 

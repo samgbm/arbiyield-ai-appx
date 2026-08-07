@@ -25,7 +25,11 @@ export function getApiDocs() {
       tags: [
         { name: "Markets", description: "Off-chain market metadata" },
         { name: "System", description: "Health & diagnostics" },
-        { name: "AI", description: "Yield strategy generation" },
+        {
+          name: "AI",
+          description: "Yield strategy generation & AI Oracle resolution",
+        },
+
         { name: "Docs", description: "OpenAPI spec" },
       ],
       components: {

@@ -25,7 +25,7 @@ const wagmiState = {
 };
 
 jest.mock("sonner", () => ({
-  toast: { error: jest.fn(), success: jest.fn() },
+  toast: { error: jest.fn(), success: jest.fn(), warning: jest.fn() },
 }));
 
 jest.mock("wagmi", () => ({
@@ -50,6 +50,15 @@ const ENDED_TS = Math.floor(Date.now() / 1000) - 60;
 /** End timestamp still in the future. */
 const FUTURE_TS = Math.floor(Date.now() / 1000) + 3600;
 
+const ADMIN_PROPS = {
+  marketId: 1 as string | number,
+  creatorAddress: CREATOR,
+  isResolved: false,
+  endTimestamp: ENDED_TS,
+  title: "Will ETH Lima have over 1000 attendees?",
+  description: "Resolves YES if official attendance ≥ 1000.",
+};
+
 describe("MarketAdminPanel", () => {
   beforeEach(() => {
     wagmiState.address = CREATOR;
@@ -64,30 +73,17 @@ describe("MarketAdminPanel", () => {
   });
 
   it("renders for the market creator when not resolved", () => {
-    render(
-      <MarketAdminPanel
-        marketId={1}
-        creatorAddress={CREATOR}
-        isResolved={false}
-        endTimestamp={ENDED_TS}
-      />,
-    );
+    render(<MarketAdminPanel {...ADMIN_PROPS} />);
 
     expect(screen.getByTestId("market-admin-panel")).toBeInTheDocument();
     expect(screen.getByTestId("resolve-yes")).toBeInTheDocument();
     expect(screen.getByTestId("resolve-no")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-oracle-resolve")).toBeInTheDocument();
   });
 
   it("hides itself when the connected account is not the creator", () => {
     wagmiState.address = OTHER;
-    const { container } = render(
-      <MarketAdminPanel
-        marketId={1}
-        creatorAddress={CREATOR}
-        isResolved={false}
-        endTimestamp={ENDED_TS}
-      />,
-    );
+    const { container } = render(<MarketAdminPanel {...ADMIN_PROPS} />);
 
     expect(container).toBeEmptyDOMElement();
     expect(screen.queryByTestId("market-admin-panel")).not.toBeInTheDocument();
@@ -95,12 +91,7 @@ describe("MarketAdminPanel", () => {
 
   it("hides itself when the market is already resolved", () => {
     const { container } = render(
-      <MarketAdminPanel
-        marketId={1}
-        creatorAddress={CREATOR}
-        isResolved={true}
-        endTimestamp={ENDED_TS}
-      />,
+      <MarketAdminPanel {...ADMIN_PROPS} isResolved={true} />,
     );
 
     expect(container).toBeEmptyDOMElement();
@@ -108,14 +99,7 @@ describe("MarketAdminPanel", () => {
   });
 
   it("disables resolve until the market end time is reached", () => {
-    render(
-      <MarketAdminPanel
-        marketId={1}
-        creatorAddress={CREATOR}
-        isResolved={false}
-        endTimestamp={FUTURE_TS}
-      />,
-    );
+    render(<MarketAdminPanel {...ADMIN_PROPS} endTimestamp={FUTURE_TS} />);
 
     expect(screen.getByTestId("resolve-waiting")).toBeInTheDocument();
     expect(screen.getByTestId("resolve-yes")).toBeDisabled();
@@ -127,14 +111,7 @@ describe("MarketAdminPanel", () => {
   });
 
   it("unlocks resolve after the end time", () => {
-    render(
-      <MarketAdminPanel
-        marketId={1}
-        creatorAddress={CREATOR}
-        isResolved={false}
-        endTimestamp={ENDED_TS}
-      />,
-    );
+    render(<MarketAdminPanel {...ADMIN_PROPS} />);
 
     expect(screen.queryByTestId("resolve-waiting")).not.toBeInTheDocument();
     expect(screen.getByTestId("resolve-yes")).not.toBeDisabled();
@@ -146,14 +123,7 @@ describe("MarketAdminPanel", () => {
 
   it("calls resolveMarket with YES outcome id", async () => {
     const user = userEvent.setup();
-    render(
-      <MarketAdminPanel
-        marketId={3}
-        creatorAddress={CREATOR}
-        isResolved={false}
-        endTimestamp={ENDED_TS}
-      />,
-    );
+    render(<MarketAdminPanel {...ADMIN_PROPS} marketId={3} />);
 
     await user.click(screen.getByTestId("resolve-yes"));
 

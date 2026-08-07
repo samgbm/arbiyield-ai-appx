@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, Gavel, LoaderCircle } from "lucide-react";
+import { Bot, ExternalLink, Gavel, LoaderCircle } from "lucide-react";
 import { getAddress, isAddressEqual } from "viem";
 import { toast } from "sonner";
 import {
@@ -14,6 +14,7 @@ import { MarketEndCountdown } from "@/components/markets/MarketEndCountdown";
 import { OUTCOME_NO, OUTCOME_YES } from "@/components/markets/TradePanel";
 import { estimateArbitrumSepoliaFees } from "@/lib/gas";
 import { PMM_CONTRACT_ADDRESS, pmmABI } from "@/lib/pmmContract";
+import type { OracleVerdict } from "@/lib/schemas";
 import { hasMarketEnded } from "@/utils/marketDates";
 import { parseRPCError } from "@/utils/rpcErrorHandler";
 
@@ -42,6 +43,10 @@ type MarketAdminPanelProps = {
   isResolved: boolean;
   /** On-chain market end (unix seconds). Resolve is blocked until this passes. */
   endTimestamp: number | bigint | string;
+  /** Off-chain market title fed to the AI Oracle. */
+  title: string;
+  /** Off-chain market description / resolution criteria for the AI Oracle. */
+  description: string;
   /** Called after a successful resolve so the page can refetch market state. */
   onResolved?: () => void;
 };
@@ -54,13 +59,19 @@ export function MarketAdminPanel({
   creatorAddress,
   isResolved,
   endTimestamp,
+  title,
+  description,
   onResolved,
 }: MarketAdminPanelProps) {
   const { address } = useAccount();
   const publicClient = usePublicClient({ chainId: ARBITRUM_SEPOLIA_CHAIN_ID });
   const notifiedHash = useRef<`0x${string}` | null>(null);
+  const resolveYesRef = useRef<HTMLButtonElement>(null);
+  const resolveNoRef = useRef<HTMLButtonElement>(null);
   const [pendingOutcome, setPendingOutcome] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [oracleLoading, setOracleLoading] = useState(false);
+  const [oracleResult, setOracleResult] = useState<OracleVerdict | null>(null);
 
   const {
     writeContractAsync,
@@ -113,7 +124,55 @@ export function MarketAdminPanel({
   })();
 
   const busy = isPending || isConfirming;
-  const canResolve = ended && marketIdBig != null && !busy;
+  const canResolve = ended && marketIdBig != null && !busy && !oracleLoading;
+
+  async function runAiOracle() {
+    if (!title.trim() || !description.trim()) {
+      toast.error("Market title and description are required for the AI Oracle.");
+      return;
+    }
+
+    setOracleLoading(true);
+    setOracleResult(null);
+
+    try {
+      const res = await fetch("/api/markets/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, description }),
+      });
+      const data = (await res.json()) as OracleVerdict & { error?: string };
+
+      if (!res.ok) {
+        throw new Error(data.error ?? `Oracle failed (${res.status})`);
+      }
+
+      setOracleResult({
+        verdict: data.verdict,
+        reasoning: data.reasoning,
+        sources: data.sources ?? [],
+      });
+
+      if (data.verdict === "UNDECIDED") {
+        toast.warning(
+          "AI Oracle could not determine the outcome — not enough public evidence.",
+        );
+        return;
+      }
+
+      // Focus the matching on-chain button; creator still signs manually.
+      requestAnimationFrame(() => {
+        if (data.verdict === "YES") resolveYesRef.current?.focus();
+        if (data.verdict === "NO") resolveNoRef.current?.focus();
+      });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "AI Oracle request failed",
+      );
+    } finally {
+      setOracleLoading(false);
+    }
+  }
 
   async function resolve(winningOutcome: number) {
     if (marketIdBig == null || !ended) return;
@@ -160,6 +219,9 @@ export function MarketAdminPanel({
     return `Resolve ${label}`;
   }
 
+  const recommendYes = oracleResult?.verdict === "YES";
+  const recommendNo = oracleResult?.verdict === "NO";
+
   return (
     <section
       data-testid="market-admin-panel"
@@ -190,13 +252,76 @@ export function MarketAdminPanel({
         </p>
       )}
 
-      <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:p-5">
+      <div className="border-b border-amber-500/25 px-4 py-4 sm:px-5">
         <button
           type="button"
+          data-testid="ai-oracle-resolve"
+          disabled={oracleLoading || busy}
+          onClick={() => void runAiOracle()}
+          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-500 px-4 text-sm font-extrabold text-white shadow-[0_0_28px_rgba(34,211,238,0.45)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {oracleLoading ? (
+            <LoaderCircle className="size-4 animate-spin" aria-hidden />
+          ) : (
+            <Bot className="size-4" aria-hidden />
+          )}
+          {oracleLoading
+            ? "Consulting AI Oracle…"
+            : "🤖 Auto-Resolve with AI Oracle"}
+        </button>
+
+        {oracleResult ? (
+          <div
+            data-testid="ai-oracle-callout"
+            className="mt-3 rounded-xl border border-cyan-500/35 bg-cyan-500/10 px-3 py-3 text-sm text-foreground"
+          >
+            <p className="font-mono-explorer text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-700 dark:text-cyan-300">
+              Verdict: {oracleResult.verdict}
+            </p>
+            <p className="mt-1.5 leading-relaxed text-[var(--accent)]">
+              {oracleResult.reasoning}
+            </p>
+            {oracleResult.sources.length > 0 ? (
+              <ul className="mt-2 space-y-1 border-t border-cyan-500/25 pt-2">
+                {oracleResult.sources.map((source) => (
+                  <li key={source.url}>
+                    <a
+                      href={source.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-cyan-800 hover:underline dark:text-cyan-200"
+                    >
+                      {source.title}
+                      <ExternalLink className="size-3" aria-hidden />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {(recommendYes || recommendNo) && (
+              <p className="mt-2 text-xs font-semibold text-amber-800 dark:text-amber-200">
+                Review the highlighted Resolve {oracleResult.verdict} button,
+                then sign in your wallet — the AI never auto-signs.
+              </p>
+            )}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:p-5">
+        <button
+          ref={resolveYesRef}
+          type="button"
           data-testid="resolve-yes"
+          data-oracle-recommended={recommendYes ? "true" : "false"}
           disabled={!canResolve}
           onClick={() => void resolve(OUTCOME_YES)}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[var(--success)] px-4 text-sm font-extrabold text-white shadow-[0_0_18px_color-mix(in_oklab,var(--success)_40%,transparent)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+          className={[
+            "inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[var(--success)] px-4 text-sm font-extrabold text-white shadow-[0_0_18px_color-mix(in_oklab,var(--success)_40%,transparent)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60",
+            recommendYes
+              ? "ring-4 ring-cyan-400 ring-offset-2 ring-offset-[var(--secondary)] outline-none"
+              : "",
+          ].join(" ")}
         >
           {busy && pendingOutcome === OUTCOME_YES && isConfirming ? (
             <LoaderCircle className="size-4 animate-spin" aria-hidden />
@@ -204,11 +329,18 @@ export function MarketAdminPanel({
           {buttonLabel(OUTCOME_YES, "YES")}
         </button>
         <button
+          ref={resolveNoRef}
           type="button"
           data-testid="resolve-no"
+          data-oracle-recommended={recommendNo ? "true" : "false"}
           disabled={!canResolve}
           onClick={() => void resolve(OUTCOME_NO)}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[var(--danger)] px-4 text-sm font-extrabold text-white shadow-[0_0_18px_color-mix(in_oklab,var(--danger)_40%,transparent)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+          className={[
+            "inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[var(--danger)] px-4 text-sm font-extrabold text-white shadow-[0_0_18px_color-mix(in_oklab,var(--danger)_40%,transparent)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60",
+            recommendNo
+              ? "ring-4 ring-cyan-400 ring-offset-2 ring-offset-[var(--secondary)] outline-none"
+              : "",
+          ].join(" ")}
         >
           {busy && pendingOutcome === OUTCOME_NO && isConfirming ? (
             <LoaderCircle className="size-4 animate-spin" aria-hidden />
