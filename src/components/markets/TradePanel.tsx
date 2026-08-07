@@ -11,6 +11,7 @@ import {
 } from "react";
 import { ExternalLink, Info, LoaderCircle, Shield } from "lucide-react";
 import { parseEther } from "viem";
+import { toast } from "sonner";
 import {
   usePublicClient,
   useWaitForTransactionReceipt,
@@ -19,6 +20,7 @@ import {
 import { useDemoStore } from "@/store/useDemoStore";
 import { estimateArbitrumSepoliaFees } from "@/lib/gas";
 import { PMM_CONTRACT_ADDRESS, pmmABI } from "@/lib/pmmContract";
+import { parseRPCError } from "@/utils/rpcErrorHandler";
 
 export type TradeSide = "Yes" | "No";
 
@@ -81,12 +83,20 @@ export function TradePanel({
   const publicClient = usePublicClient({ chainId: ARBITRUM_SEPOLIA_CHAIN_ID });
 
   const {
-    writeContract,
+    writeContractAsync,
     data: hash,
     isPending,
     error: writeError,
     reset,
-  } = useWriteContract();
+  } = useWriteContract({
+    mutation: {
+      onError(error) {
+        const message = parseRPCError(error);
+        setLocalError(message);
+        toast.error(message);
+      },
+    },
+  });
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
@@ -96,6 +106,7 @@ export function TradePanel({
     if (!isSuccess || !hash || notifiedHash.current === hash) return;
     notifiedHash.current = hash;
     setAmount("");
+    toast.success("Transaction confirmed!");
     onTradeSuccess?.(hash);
   }, [isSuccess, hash, onTradeSuccess]);
 
@@ -112,10 +123,7 @@ export function TradePanel({
   const canTrade = parsedAmount > 0 && !busy;
 
   const errorMessage =
-    localError ??
-    (writeError
-      ? (writeError.message.split("\n")[0] ?? "Transaction failed")
-      : null);
+    localError ?? (writeError ? parseRPCError(writeError) : null);
 
   async function placeOnChainTrade() {
     if (marketId === undefined || marketId === "") {
@@ -150,17 +158,22 @@ export function TradePanel({
       }
     }
 
-    writeContract({
-      address: PMM_CONTRACT_ADDRESS,
-      abi: pmmABI,
-      functionName: "buyShares",
-      args: [id, outcomeId],
-      value,
-      chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
-      ...(maxFeePerGas != null
-        ? { maxFeePerGas, maxPriorityFeePerGas }
-        : {}),
-    });
+    try {
+      await writeContractAsync({
+        address: PMM_CONTRACT_ADDRESS,
+        abi: pmmABI,
+        functionName: "buyShares",
+        args: [id, outcomeId],
+        value,
+        chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+        ...(maxFeePerGas != null
+          ? { maxFeePerGas, maxPriorityFeePerGas }
+          : {}),
+      });
+    } catch (error) {
+      // mutation.onError already toasts; keep a local fallback message.
+      setLocalError(parseRPCError(error));
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

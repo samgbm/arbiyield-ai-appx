@@ -7,6 +7,10 @@ import { PMM_CONTRACT_ADDRESS, pmmABI } from "@/lib/pmmContract";
 import { useDemoStore } from "@/store/useDemoStore";
 
 const writeContract = jest.fn();
+const writeContractAsync = jest.fn(async (...args: unknown[]) => {
+  writeContract(...args);
+  return "0xabc" as `0x${string}`;
+});
 const reset = jest.fn();
 const refetchPositions = jest.fn();
 
@@ -27,6 +31,10 @@ const wagmiState = {
   isPositionsLoading: false,
 };
 
+jest.mock("sonner", () => ({
+  toast: { error: jest.fn(), success: jest.fn() },
+}));
+
 jest.mock("wagmi", () => ({
   useAccount: () => ({
     address: wagmiState.address,
@@ -39,6 +47,7 @@ jest.mock("wagmi", () => ({
   }),
   useWriteContract: () => ({
     writeContract,
+    writeContractAsync,
     data: wagmiState.hash,
     isPending: wagmiState.isPending,
     error: wagmiState.writeError,
@@ -62,6 +71,7 @@ function resetMocks() {
   wagmiState.positionData = undefined;
   wagmiState.isPositionsLoading = false;
   writeContract.mockClear();
+  writeContractAsync.mockClear();
   reset.mockClear();
   refetchPositions.mockClear();
 }

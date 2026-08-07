@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Banknote, ExternalLink, LoaderCircle, Wallet } from "lucide-react";
 import { formatEther } from "viem";
+import { toast } from "sonner";
 import {
   useAccount,
   usePublicClient,
@@ -14,6 +15,7 @@ import { estimateArbitrumSepoliaFees } from "@/lib/gas";
 import { PMM_CONTRACT_ADDRESS, pmmABI } from "@/lib/pmmContract";
 import { useDemoStore } from "@/store/useDemoStore";
 import { OUTCOME_NO, OUTCOME_YES } from "@/components/markets/TradePanel";
+import { parseRPCError } from "@/utils/rpcErrorHandler";
 
 const ARBITRUM_SEPOLIA_CHAIN_ID = 421_614;
 const ARBISCAN_TX = "https://sepolia.arbiscan.io/tx";
@@ -96,12 +98,18 @@ export function UserPositions({
   });
 
   const {
-    writeContract,
+    writeContractAsync,
     data: hash,
     isPending,
     error: writeError,
     reset,
-  } = useWriteContract();
+  } = useWriteContract({
+    mutation: {
+      onError(error) {
+        toast.error(parseRPCError(error));
+      },
+    },
+  });
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
@@ -110,6 +118,7 @@ export function UserPositions({
   useEffect(() => {
     if (!isSuccess || !hash || notifiedHash.current === hash) return;
     notifiedHash.current = hash;
+    toast.success("Transaction confirmed!");
     void refetchPositions();
     onCashoutSuccess?.();
   }, [isSuccess, hash, refetchPositions, onCashoutSuccess]);
@@ -157,7 +166,7 @@ export function UserPositions({
     run: (fees: {
       maxFeePerGas?: bigint;
       maxPriorityFeePerGas?: bigint;
-    }) => void,
+    }) => Promise<void>,
   ) {
     let maxFeePerGas: bigint | undefined;
     let maxPriorityFeePerGas: bigint | undefined;
@@ -170,7 +179,7 @@ export function UserPositions({
         // Fall back to wallet defaults.
       }
     }
-    run({ maxFeePerGas, maxPriorityFeePerGas });
+    await run({ maxFeePerGas, maxPriorityFeePerGas });
   }
 
   async function handleCashout(outcomeId: number) {
@@ -181,21 +190,25 @@ export function UserPositions({
     setTxAction("cashout");
     setActiveOutcomeId(outcomeId);
 
-    await withFees((fees) => {
-      writeContract({
-        address: PMM_CONTRACT_ADDRESS,
-        abi: pmmABI,
-        functionName: "cashoutShares",
-        args: [marketIdBig, outcomeId],
-        chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
-        ...(fees.maxFeePerGas != null
-          ? {
-              maxFeePerGas: fees.maxFeePerGas,
-              maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
-            }
-          : {}),
+    try {
+      await withFees(async (fees) => {
+        await writeContractAsync({
+          address: PMM_CONTRACT_ADDRESS,
+          abi: pmmABI,
+          functionName: "cashoutShares",
+          args: [marketIdBig, outcomeId],
+          chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+          ...(fees.maxFeePerGas != null
+            ? {
+                maxFeePerGas: fees.maxFeePerGas,
+                maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
+              }
+            : {}),
+        });
       });
-    });
+    } catch {
+      // mutation.onError already toasted a clean message.
+    }
   }
 
   async function handleClaim(outcomeId: number) {
@@ -206,21 +219,25 @@ export function UserPositions({
     setTxAction("claim");
     setActiveOutcomeId(outcomeId);
 
-    await withFees((fees) => {
-      writeContract({
-        address: PMM_CONTRACT_ADDRESS,
-        abi: pmmABI,
-        functionName: "claimWinnings",
-        args: [marketIdBig],
-        chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
-        ...(fees.maxFeePerGas != null
-          ? {
-              maxFeePerGas: fees.maxFeePerGas,
-              maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
-            }
-          : {}),
+    try {
+      await withFees(async (fees) => {
+        await writeContractAsync({
+          address: PMM_CONTRACT_ADDRESS,
+          abi: pmmABI,
+          functionName: "claimWinnings",
+          args: [marketIdBig],
+          chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+          ...(fees.maxFeePerGas != null
+            ? {
+                maxFeePerGas: fees.maxFeePerGas,
+                maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
+              }
+            : {}),
+        });
       });
-    });
+    } catch {
+      // mutation.onError already toasted a clean message.
+    }
   }
 
   if (!isDemoMode && !isConnected) {
@@ -269,9 +286,7 @@ export function UserPositions({
     );
   }
 
-  const errorMessage = writeError
-    ? (writeError.message.split("\n")[0] ?? "Transaction failed")
-    : null;
+  const errorMessage = writeError ? parseRPCError(writeError) : null;
 
   const successLabel =
     txAction === "claim" ? "Winnings claimed" : "Cashout confirmed";

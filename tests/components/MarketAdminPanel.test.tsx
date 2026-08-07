@@ -9,6 +9,10 @@ const CREATOR = "0x5a967532fd910921f970fCFf449eB95b61C782f4";
 const OTHER = "0x0000000000000000000000000000000000000001";
 
 const writeContract = jest.fn();
+const writeContractAsync = jest.fn(async (...args: unknown[]) => {
+  writeContract(...args);
+  return "0xabc" as `0x${string}`;
+});
 const reset = jest.fn();
 
 const wagmiState = {
@@ -20,10 +24,15 @@ const wagmiState = {
   writeError: null as Error | null,
 };
 
+jest.mock("sonner", () => ({
+  toast: { error: jest.fn(), success: jest.fn() },
+}));
+
 jest.mock("wagmi", () => ({
   useAccount: () => ({ address: wagmiState.address }),
   useWriteContract: () => ({
     writeContract,
+    writeContractAsync,
     data: wagmiState.hash,
     isPending: wagmiState.isPending,
     error: wagmiState.writeError,
@@ -50,6 +59,7 @@ describe("MarketAdminPanel", () => {
     wagmiState.hash = undefined;
     wagmiState.writeError = null;
     writeContract.mockClear();
+    writeContractAsync.mockClear();
     reset.mockClear();
   });
 

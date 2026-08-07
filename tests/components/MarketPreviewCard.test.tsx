@@ -12,6 +12,10 @@ const sample = {
 };
 
 const writeContract = jest.fn();
+const writeContractAsync = jest.fn(async (...args: unknown[]) => {
+  writeContract(...args);
+  return "0xabc" as `0x${string}`;
+});
 const reset = jest.fn();
 
 const wagmiState = {
@@ -23,10 +27,15 @@ const wagmiState = {
   writeError: null as Error | null,
 };
 
+jest.mock("sonner", () => ({
+  toast: { error: jest.fn(), success: jest.fn() },
+}));
+
 jest.mock("wagmi", () => ({
   useAccount: () => ({ isConnected: true, address: "0x5a967532fd910921f970fCFf449eB95b61C782f4" }),
   useWriteContract: () => ({
     writeContract,
+    writeContractAsync,
     data: wagmiState.hash,
     isPending: wagmiState.isPending,
     error: wagmiState.writeError,
@@ -82,6 +91,7 @@ function resetWagmi() {
   wagmiState.receipt = undefined;
   wagmiState.writeError = null;
   writeContract.mockClear();
+  writeContractAsync.mockClear();
   reset.mockClear();
 }
 

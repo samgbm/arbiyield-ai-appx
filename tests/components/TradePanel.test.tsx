@@ -11,6 +11,10 @@ import { PMM_CONTRACT_ADDRESS, pmmABI } from "@/lib/pmmContract";
 import { useDemoStore } from "@/store/useDemoStore";
 
 const writeContract = jest.fn();
+const writeContractAsync = jest.fn(async (...args: unknown[]) => {
+  writeContract(...args);
+  return "0xabc" as `0x${string}`;
+});
 const reset = jest.fn();
 
 const wagmiState = {
@@ -21,9 +25,14 @@ const wagmiState = {
   writeError: null as Error | null,
 };
 
+jest.mock("sonner", () => ({
+  toast: { error: jest.fn(), success: jest.fn() },
+}));
+
 jest.mock("wagmi", () => ({
   useWriteContract: () => ({
     writeContract,
+    writeContractAsync,
     data: wagmiState.hash,
     isPending: wagmiState.isPending,
     error: wagmiState.writeError,
@@ -43,6 +52,7 @@ function resetWagmi() {
   wagmiState.hash = undefined;
   wagmiState.writeError = null;
   writeContract.mockClear();
+  writeContractAsync.mockClear();
   reset.mockClear();
 }
 

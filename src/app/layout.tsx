@@ -5,6 +5,7 @@ import {
   Roboto,
   Roboto_Mono,
 } from "next/font/google";
+import { Toaster } from "sonner";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -73,6 +74,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 <Footer />
               </div>
             </div>
+            <Toaster position="bottom-right" theme="dark" richColors closeButton />
           </Web3Provider>
         </ThemeProvider>
       </body>

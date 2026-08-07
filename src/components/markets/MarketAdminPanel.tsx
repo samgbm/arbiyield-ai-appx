@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, Gavel, LoaderCircle } from "lucide-react";
 import { getAddress, isAddressEqual } from "viem";
+import { toast } from "sonner";
 import {
   useAccount,
   usePublicClient,
@@ -14,6 +15,7 @@ import { OUTCOME_NO, OUTCOME_YES } from "@/components/markets/TradePanel";
 import { estimateArbitrumSepoliaFees } from "@/lib/gas";
 import { PMM_CONTRACT_ADDRESS, pmmABI } from "@/lib/pmmContract";
 import { hasMarketEnded } from "@/utils/marketDates";
+import { parseRPCError } from "@/utils/rpcErrorHandler";
 
 const ARBITRUM_SEPOLIA_CHAIN_ID = 421_614;
 const ARBISCAN_TX = "https://sepolia.arbiscan.io/tx";
@@ -61,12 +63,18 @@ export function MarketAdminPanel({
   const [now, setNow] = useState(() => Date.now());
 
   const {
-    writeContract,
+    writeContractAsync,
     data: hash,
     isPending,
     error: writeError,
     reset,
-  } = useWriteContract();
+  } = useWriteContract({
+    mutation: {
+      onError(error) {
+        toast.error(parseRPCError(error));
+      },
+    },
+  });
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
@@ -75,6 +83,7 @@ export function MarketAdminPanel({
   useEffect(() => {
     if (!isSuccess || !hash || notifiedHash.current === hash) return;
     notifiedHash.current = hash;
+    toast.success("Transaction confirmed!");
     onResolved?.();
   }, [isSuccess, hash, onResolved]);
 
@@ -125,21 +134,23 @@ export function MarketAdminPanel({
       }
     }
 
-    writeContract({
-      address: PMM_CONTRACT_ADDRESS,
-      abi: pmmABI,
-      functionName: "resolveMarket",
-      args: [marketIdBig, winningOutcome],
-      chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
-      ...(maxFeePerGas != null
-        ? { maxFeePerGas, maxPriorityFeePerGas }
-        : {}),
-    });
+    try {
+      await writeContractAsync({
+        address: PMM_CONTRACT_ADDRESS,
+        abi: pmmABI,
+        functionName: "resolveMarket",
+        args: [marketIdBig, winningOutcome],
+        chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+        ...(maxFeePerGas != null
+          ? { maxFeePerGas, maxPriorityFeePerGas }
+          : {}),
+      });
+    } catch {
+      // mutation.onError already toasted a clean message.
+    }
   }
 
-  const errorMessage = writeError
-    ? (writeError.message.split("\n")[0] ?? "Resolve failed")
-    : null;
+  const errorMessage = writeError ? parseRPCError(writeError) : null;
 
   function buttonLabel(outcome: number, label: string) {
     const isThis = busy && pendingOutcome === outcome;

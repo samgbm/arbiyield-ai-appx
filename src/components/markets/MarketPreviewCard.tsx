@@ -10,6 +10,7 @@ import {
   Tag,
 } from "lucide-react";
 import { parseEventLogs, type Log } from "viem";
+import { toast } from "sonner";
 import {
   useAccount,
   usePublicClient,
@@ -26,6 +27,7 @@ import {
   isRelativeEndDate,
   normalizeMarketEndDate,
 } from "@/utils/marketDates";
+import { parseRPCError } from "@/utils/rpcErrorHandler";
 
 /** Arbitrum Sepolia — avoid importing wagmi/chains (Jest ESM friction). */
 const ARBITRUM_SEPOLIA_CHAIN_ID = 421_614;
@@ -82,15 +84,24 @@ export function MarketPreviewCard({
     "idle" | "saving" | "saved" | "error"
   >("idle");
   const metadataPostedFor = useRef<string | null>(null);
+  const successToastFor = useRef<`0x${string}` | null>(null);
   const { isConnected, address } = useAccount();
 
   const {
-    writeContract,
+    writeContractAsync,
     data: hash,
     isPending,
     error: writeError,
     reset,
-  } = useWriteContract();
+  } = useWriteContract({
+    mutation: {
+      onError(error) {
+        const message = parseRPCError(error);
+        setLocalError(message);
+        toast.error(message);
+      },
+    },
+  });
 
   const publicClient = usePublicClient({ chainId: ARBITRUM_SEPOLIA_CHAIN_ID });
 
@@ -101,6 +112,12 @@ export function MarketPreviewCard({
   } = useWaitForTransactionReceipt({
     hash,
   });
+
+  useEffect(() => {
+    if (!isSuccess || !hash || successToastFor.current === hash) return;
+    successToastFor.current = hash;
+    toast.success("Transaction confirmed!");
+  }, [isSuccess, hash]);
 
   // Fallback id if event logs are missing: newest market is count - 1.
   const { data: marketCount } = useReadContract({
@@ -235,17 +252,21 @@ export function MarketPreviewCard({
       }
     }
 
-    writeContract({
-      address: PMM_CONTRACT_ADDRESS,
-      abi: pmmABI,
-      functionName: "createMarket",
-      // Stylus ABI uses uint64 — keep within Number range via seconds timestamp.
-      args: [endTimestamp],
-      chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
-      ...(maxFeePerGas != null
-        ? { maxFeePerGas, maxPriorityFeePerGas }
-        : {}),
-    });
+    try {
+      await writeContractAsync({
+        address: PMM_CONTRACT_ADDRESS,
+        abi: pmmABI,
+        functionName: "createMarket",
+        // Stylus ABI uses uint64 — keep within Number range via seconds timestamp.
+        args: [endTimestamp],
+        chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+        ...(maxFeePerGas != null
+          ? { maxFeePerGas, maxPriorityFeePerGas }
+          : {}),
+      });
+    } catch (error) {
+      setLocalError(parseRPCError(error));
+    }
   }
 
   const busy = isPending || isConfirming;
@@ -256,7 +277,7 @@ export function MarketPreviewCard({
   const errorMessage =
     localError ??
     pastDateError ??
-    (writeError ? (writeError.message.split("\n")[0] ?? "Transaction failed") : null);
+    (writeError ? parseRPCError(writeError) : null);
 
   return (
     <article
