@@ -1,9 +1,9 @@
 import { generateObject, generateText, stepCountIs } from "ai";
-import { tavilySearch } from "@tavily/ai-sdk";
 import { z } from "zod";
 import { openai } from "@/lib/ai";
-import { OracleVerdictSchema } from "@/lib/schemas";
 import { logger } from "@/lib/logger";
+import { OracleVerdictSchema } from "@/lib/schemas";
+import { tavilySearch } from "@/lib/tavily";
 
 /** Oracle research + structured verdict can exceed default serverless limits. */
 export const maxDuration = 60;

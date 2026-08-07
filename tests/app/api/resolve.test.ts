@@ -12,20 +12,16 @@ jest.mock("ai", () => ({
   stepCountIs: () => () => true,
 }));
 
-jest.mock(
-  "@tavily/ai-sdk",
-  () => ({
-    tavilySearch: jest.fn(() => ({
-      description: "mock tavily search",
-      inputSchema: {},
-      execute: jest.fn(),
-    })),
-  }),
-  { virtual: true },
-);
-
 jest.mock("../../../src/lib/ai", () => ({
   openai: jest.fn((model: string) => model),
+}));
+
+jest.mock("../../../src/lib/tavily", () => ({
+  tavilySearch: jest.fn(() => ({
+    description: "mock tavily search",
+    inputSchema: {},
+    execute: jest.fn(),
+  })),
 }));
 
 jest.mock("../../../src/lib/logger", () => ({
