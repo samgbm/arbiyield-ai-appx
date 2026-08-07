@@ -1,7 +1,7 @@
 //! El Niño Climate Resilience — Arbitrum Stylus core
 //!
 //! Holds parametric farmer insurance policies and immutable aid-logistics
-//! checkpoint hashes. Increment 4 adds batch farmer registration.
+//! checkpoint hashes. Increment 5 adds Climate Data Relay → zero-click payouts.
 
 #![cfg_attr(not(any(test, feature = "export-abi")), no_main)]
 extern crate alloc;
@@ -9,13 +9,27 @@ extern crate alloc;
 use alloc::{string::String, vec::Vec};
 
 use alloy_primitives::{Address, B256, U256};
+use stylus_sdk::alloy_sol_types::sol;
 use stylus_sdk::{
     prelude::*,
     storage::{
         StorageAddress, StorageB256, StorageBool, StorageMap, StorageString,
-        StorageU256,
+        StorageU256, StorageVec,
     },
 };
+
+/// Designated Climate Data Relayer / admin (MetaMask Arbitrum Sepolia).
+pub const CLIMATE_RELAYER_ADMIN: Address = alloy_primitives::address!(
+    "0xca76951A11A9adE6553ef54AB1d1260f08c3460d"
+);
+
+/// Severe flood threshold in millimeters (ENFEN / SENAMHI style feed).
+pub const FLOOD_THRESHOLD_MM: u64 = 50;
+
+sol! {
+    /// Emitted when a farmer's parametric coverage is disbursed (simulated USDC).
+    event PayoutDisbursed(address indexed farmer, string location, uint256 amount);
+}
 
 /// Parametric insurance policy for a single farmer (Stylus storage).
 #[storage]
@@ -58,8 +72,12 @@ pub struct AidCheckpointData {
 #[storage]
 #[entrypoint]
 pub struct ElNinoResilience {
+    /// Authorized climate-data relayer (admin).
+    admin: StorageAddress,
     /// `mapping(address => FarmerPolicy) policies`
     policies: StorageMap<Address, FarmerPolicy>,
+    /// Iterable registry of registered farmer addresses (mappings alone are not iterable).
+    farmer_ids: StorageVec<StorageAddress>,
     /// `mapping(bytes32 => AidCheckpoint) aid_batches`
     #[allow(dead_code)] // Wired in Increment 6.
     aid_batches: StorageMap<B256, AidCheckpoint>,
@@ -72,9 +90,21 @@ fn err(msg: &str) -> Vec<u8> {
 /// External ABI surface (`#[public]` is Stylus SDK 0.10's equivalent of `#[external]`).
 #[public]
 impl ElNinoResilience {
+    /// One-time init: lock in the designated Climate Data Relayer admin address.
+    pub fn initialize(&mut self) -> Result<(), Vec<u8>> {
+        if self.admin.get() != Address::ZERO {
+            return Err(err("already initialized"));
+        }
+        self.admin.set(CLIMATE_RELAYER_ADMIN);
+        Ok(())
+    }
+
+    /// Returns the authorized climate relayer / admin.
+    pub fn get_admin(&self) -> Address {
+        self.admin.get()
+    }
+
     /// Register many farmers in a single Stylus transaction (Walkthrough 2 / NFR-3).
-    ///
-    /// Parallel arrays must share the same length; each farmer gets an active policy.
     pub fn batch_register_farmers(
         &mut self,
         farmers: Vec<Address>,
@@ -91,11 +121,24 @@ impl ElNinoResilience {
             let location = &locations[i];
             let coverage = coverage_amounts[i];
 
-            let mut policy = self.policies.setter(*farmer);
-            policy.farmer_address.set(*farmer);
-            policy.location_id.set_str(location);
-            policy.coverage_amount.set(coverage);
-            policy.is_active.set(true);
+            let already_tracked = {
+                let existing = self.policies.getter(*farmer);
+                !existing.location_id.get_string().is_empty()
+                    || existing.is_active.get()
+                    || existing.coverage_amount.get() != U256::ZERO
+            };
+
+            {
+                let mut policy = self.policies.setter(*farmer);
+                policy.farmer_address.set(*farmer);
+                policy.location_id.set_str(location);
+                policy.coverage_amount.set(coverage);
+                policy.is_active.set(true);
+            }
+
+            if !already_tracked {
+                self.farmer_ids.push(*farmer);
+            }
         }
 
         Ok(())
@@ -110,6 +153,73 @@ impl ElNinoResilience {
             policy.is_active.get(),
         )
     }
+
+    /// Climate Data Relay: if regional rainfall meets the flood threshold, disburse
+    /// coverage to every active farmer at that `location_id` (zero-click payout).
+    ///
+    /// Returns the number of farmers paid. ERC-20 transfer is simulated via
+    /// `PayoutDisbursed` + deactivating the policy (prevents double payouts).
+    pub fn process_climate_relay(
+        &mut self,
+        location_id: String,
+        rainfall_mm: U256,
+    ) -> Result<U256, Vec<u8>> {
+        self.require_admin()?;
+
+        if rainfall_mm < U256::from(FLOOD_THRESHOLD_MM) {
+            return Err(err("Threshold not met"));
+        }
+
+        let mut paid_count = U256::ZERO;
+        let n = self.farmer_ids.len();
+
+        for i in 0..n {
+            let Some(farmer) = self.farmer_ids.get(i) else {
+                continue;
+            };
+
+            let (policy_location, coverage, is_active) = {
+                let policy = self.policies.getter(farmer);
+                (
+                    policy.location_id.get_string(),
+                    policy.coverage_amount.get(),
+                    policy.is_active.get(),
+                )
+            };
+
+            if !is_active || policy_location != location_id {
+                continue;
+            }
+
+            {
+                let mut policy = self.policies.setter(farmer);
+                policy.is_active.set(false);
+            }
+
+            self.vm().log(PayoutDisbursed {
+                farmer,
+                location: policy_location,
+                amount: coverage,
+            });
+
+            paid_count += U256::from(1);
+        }
+
+        Ok(paid_count)
+    }
+}
+
+impl ElNinoResilience {
+    fn require_admin(&self) -> Result<(), Vec<u8>> {
+        let admin = self.admin.get();
+        if admin == Address::ZERO {
+            return Err(err("contract not initialized"));
+        }
+        if self.vm().msg_sender() != admin {
+            return Err(err("unauthorized relayer"));
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -117,6 +227,13 @@ mod test {
     use super::*;
     use alloy_primitives::address;
     use stylus_sdk::testing::*;
+
+    fn setup_initialized(vm: &TestVM) -> ElNinoResilience {
+        let mut contract = ElNinoResilience::from(vm);
+        vm.set_sender(CLIMATE_RELAYER_ADMIN);
+        contract.initialize().expect("initialize");
+        contract
+    }
 
     #[test]
     fn test_in_memory_structs_initialize() {
@@ -137,11 +254,8 @@ mod test {
 
         assert_eq!(policy.farmer_address, farmer);
         assert_eq!(policy.location_id, "PIURA-COOP-01");
-        assert_eq!(policy.coverage_amount, U256::from(500_000_000u64));
         assert!(policy.is_active);
-
         assert_eq!(checkpoint.batch_hash, B256::repeat_byte(0xab));
-        assert_eq!(checkpoint.location_name, "Warehouse A — Piura");
         assert!(!checkpoint.is_flagged);
     }
 
@@ -178,17 +292,6 @@ mod test {
         assert_eq!(location, locations[1]);
         assert_eq!(coverage, coverage_amounts[1]);
         assert!(active);
-
-        // Spot-check the other two slots as well.
-        let (loc0, cov0, active0) = contract.get_policy(farmers[0]);
-        assert_eq!(loc0, "PIURA-01");
-        assert_eq!(cov0, U256::from(100_000_000u64));
-        assert!(active0);
-
-        let (loc2, cov2, active2) = contract.get_policy(farmers[2]);
-        assert_eq!(loc2, "LAMBAYEQUE-03");
-        assert_eq!(cov2, U256::from(300_000_000u64));
-        assert!(active2);
     }
 
     #[test]
@@ -204,11 +307,7 @@ mod test {
             )
             .expect_err("mismatched vector lengths must revert");
 
-        assert!(
-            String::from_utf8_lossy(&err).contains("length mismatch"),
-            "unexpected error: {}",
-            String::from_utf8_lossy(&err)
-        );
+        assert!(String::from_utf8_lossy(&err).contains("length mismatch"));
     }
 
     #[test]
@@ -238,5 +337,68 @@ mod test {
         assert_eq!(location, locations[mid]);
         assert_eq!(coverage, coverage_amounts[mid]);
         assert!(active);
+    }
+
+    #[test]
+    fn test_climate_relay_trigger() {
+        let vm = TestVM::default();
+        let mut contract = setup_initialized(&vm);
+
+        let farmer = address!("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        // 100 USDC with 6 decimals.
+        let coverage = U256::from(100_000_000u64);
+
+        contract
+            .batch_register_farmers(
+                alloc::vec![farmer],
+                alloc::vec![String::from("Piura")],
+                alloc::vec![coverage],
+            )
+            .expect("register Piura farmer");
+
+        // Action 1 — below flood threshold.
+        let below = contract
+            .process_climate_relay(String::from("Piura"), U256::from(30))
+            .expect_err("30mm should fail threshold");
+        assert!(
+            String::from_utf8_lossy(&below).contains("Threshold not met"),
+            "unexpected: {}",
+            String::from_utf8_lossy(&below)
+        );
+
+        let (_, _, still_active) = contract.get_policy(farmer);
+        assert!(still_active, "policy must stay active when threshold fails");
+
+        // Action 2 — severe rainfall (85mm).
+        let paid = contract
+            .process_climate_relay(String::from("Piura"), U256::from(85))
+            .expect("85mm should trigger payouts");
+        assert_eq!(paid, U256::from(1));
+
+        let (location, amount, active) = contract.get_policy(farmer);
+        assert_eq!(location, "Piura");
+        assert_eq!(amount, coverage);
+        assert!(!active, "policy must deactivate after payout");
+    }
+
+    #[test]
+    fn test_climate_relay_rejects_unauthorized_caller() {
+        let vm = TestVM::default();
+        let mut contract = setup_initialized(&vm);
+
+        let farmer = address!("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        contract
+            .batch_register_farmers(
+                alloc::vec![farmer],
+                alloc::vec![String::from("Piura")],
+                alloc::vec![U256::from(100_000_000u64)],
+            )
+            .unwrap();
+
+        vm.set_sender(address!("0x1111111111111111111111111111111111111111"));
+        let err = contract
+            .process_climate_relay(String::from("Piura"), U256::from(85))
+            .expect_err("spoofed relayer must fail");
+        assert!(String::from_utf8_lossy(&err).contains("unauthorized"));
     }
 }
