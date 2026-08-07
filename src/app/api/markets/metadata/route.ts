@@ -17,8 +17,41 @@ const postBodySchema = z.object({
 });
 
 /**
- * GET /api/markets/metadata?id=3
- * Returns one market row, or all markets when `id` is omitted.
+ * @swagger
+ * /api/markets/metadata:
+ *   get:
+ *     tags:
+ *       - Markets
+ *     summary: Get market metadata
+ *     description: >
+ *       Returns metadata for a single market when `id` is provided, or all
+ *       markets when omitted. Text lives in Supabase; financial state remains
+ *       on-chain in MeleePMM.
+ *     parameters:
+ *       - in: query
+ *         name: id
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 0
+ *         description: On-chain market id
+ *     responses:
+ *       200:
+ *         description: Market object or array of markets
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - $ref: '#/components/schemas/MarketMetadata'
+ *                 - type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/MarketMetadata'
+ *       400:
+ *         description: Invalid id query parameter
+ *       404:
+ *         description: Market metadata not found
+ *       500:
+ *         description: Supabase query failed
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -79,8 +112,53 @@ export async function GET(request: Request) {
 }
 
 /**
- * POST /api/markets/metadata
- * Persist AI-generated title/description after on-chain createMarket confirms.
+ * @swagger
+ * /api/markets/metadata:
+ *   post:
+ *     tags:
+ *       - Markets
+ *     summary: Upsert market metadata
+ *     description: >
+ *       Persists AI-generated title, description, and category for a newly
+ *       minted on-chain market id after `createMarket` confirms on Stylus.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - id
+ *               - title
+ *               - description
+ *               - category
+ *               - creator_address
+ *             properties:
+ *               id:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: On-chain MeleePMM market id
+ *               title:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               category:
+ *                 type: string
+ *                 enum: [Crypto, Culture, AI, Sports, Macro]
+ *               creator_address:
+ *                 type: string
+ *                 pattern: '^0x[a-fA-F0-9]{40}$'
+ *     responses:
+ *       201:
+ *         description: Metadata saved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MarketMetadata'
+ *       400:
+ *         description: Invalid body
+ *       500:
+ *         description: Supabase upsert failed
  */
 export async function POST(request: Request) {
   try {

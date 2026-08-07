@@ -1,0 +1,8 @@
+/* Dark-frame treatment for swagger-ui-dist inside /docs */
+.swagger-dark .swagger-ui {
+  filter: invert(0.92) hue-rotate(180deg);
+}
+
+.swagger-dark .swagger-ui .topbar {
+  display: none;
+}

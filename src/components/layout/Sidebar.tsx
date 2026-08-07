@@ -6,8 +6,10 @@ import { useEffect, useState } from "react";
 import {
   Briefcase,
   ChartCandlestick,
+  FileJson,
   LayoutDashboard,
   Menu,
+  ShieldCheck,
   Sparkles,
   X,
   Zap,
@@ -44,6 +46,12 @@ const NAV_ITEMS = [
     label: "Create Market",
     description: "AI generative deploy card",
     icon: Sparkles,
+  },
+  {
+    href: "/docs",
+    label: "API Docs",
+    description: "OpenAPI · Try it out",
+    icon: FileJson,
   },
 ] as const;
 
@@ -119,8 +127,8 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Live-pitch fail-safe — mirrors footer stealth toggle via Zustand. */}
-      <div className="border-t border-border p-3">
+      {/* Live-pitch fail-safe + system status */}
+      <div className="space-y-1 border-t border-border p-3">
         <button
           type="button"
           onClick={toggleDemoMode}
@@ -144,6 +152,22 @@ export function Sidebar() {
             </span>
           </span>
         </button>
+
+        <Link
+          href="/health"
+          onClick={() => setOpenedForPath(null)}
+          data-testid="nav-system-status"
+          className={`flex min-h-10 w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition ${
+            pathname.startsWith("/health")
+              ? "bg-emerald-500/12 text-emerald-700 ring-1 ring-emerald-500/30 dark:text-emerald-300"
+              : "text-[var(--muted)] hover:bg-[color-mix(in_oklab,var(--foreground)_6%,transparent)] hover:text-foreground"
+          }`}
+        >
+          <ShieldCheck className="size-4 shrink-0" aria-hidden />
+          <span className="text-xs font-semibold tracking-wide">
+            System Status
+          </span>
+        </Link>
       </div>
     </div>
   );

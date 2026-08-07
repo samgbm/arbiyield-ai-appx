@@ -10,6 +10,34 @@ const SYSTEM_PROMPT = `You are a DeFi strategist. You must respond with a JSON o
 Focus on low-risk, verifiable Arbitrum (or Arbitrum-deployed) opportunities such as established lending markets, liquid staking, and reputable DEXes.
 Avoid leverage, unaudited farms, and speculative tips. expectedYield must be an integer APY percentage. This is educational, not financial advice.`;
 
+/**
+ * @swagger
+ * /api/chat:
+ *   post:
+ *     tags:
+ *       - AI
+ *     summary: Stream a structured yield strategy
+ *     description: >
+ *       Accepts a chat message history and streams a structured Arbitrum yield
+ *       strategy object (StrategySchema) from the AI strategist.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [messages]
+ *             properties:
+ *               messages:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *     responses:
+ *       200:
+ *         description: Text stream of the structured strategy object
+ *       500:
+ *         description: Strategy generation failed
+ */
 export async function POST(req: Request) {
   const requestId = crypto.randomUUID();
   const log = logger.child({ requestId, route: "/api/chat" });
