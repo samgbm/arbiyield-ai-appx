@@ -1,10 +1,30 @@
 import { parseRPCError } from "@/utils/rpcErrorHandler";
+import { logger } from "@/utils/logger";
 
 describe("parseRPCError", () => {
-  it("maps MetaMask rejection code 4001", () => {
-    expect(parseRPCError({ code: 4001, message: "User rejected the request." })).toBe(
-      "Transaction rejected in wallet.",
+  const warnSpy = jest.spyOn(logger, "warn").mockImplementation(() => logger);
+
+  afterEach(() => {
+    warnSpy.mockClear();
+  });
+
+  afterAll(() => {
+    warnSpy.mockRestore();
+  });
+
+  it("logs the raw error before returning a friendly message", () => {
+    const raw = { code: 4001, message: "User rejected the request." };
+    parseRPCError(raw);
+    expect(warnSpy).toHaveBeenCalledWith(
+      { rawError: raw },
+      "RPC Transaction Failed",
     );
+  });
+
+  it("maps MetaMask rejection code 4001", () => {
+    expect(
+      parseRPCError({ code: 4001, message: "User rejected the request." }),
+    ).toBe("Transaction rejected in wallet.");
   });
 
   it("maps user-rejected message strings", () => {

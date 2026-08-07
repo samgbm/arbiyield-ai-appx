@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { logger } from "@/lib/logger";
 import { supabase, type MarketMetadataRow } from "@/lib/supabaseClient";
+import { logger } from "@/utils/logger";
 
 const CATEGORIES = ["Crypto", "Culture", "AI", "Sports", "Macro"] as const;
 
@@ -102,6 +102,11 @@ export async function POST(request: Request) {
       creator_address: parsed.data.creator_address,
     };
 
+    logger.info(
+      { marketId: row.id, title: row.title },
+      "Saving new market metadata to Supabase",
+    );
+
     // Upsert so deploy retries (same marketId) stay idempotent.
     const { data, error } = await supabase
       .from("markets")
@@ -110,14 +115,20 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
-      logger.error({ err: error, id: row.id }, "Supabase upsert market failed");
+      logger.error(
+        { error, marketId: row.id },
+        "Failed to save market metadata",
+      );
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    logger.info({ id: row.id }, "Saved market metadata to Supabase");
+    logger.info(
+      { marketId: row.id, title: row.title },
+      "Saved market metadata to Supabase",
+    );
     return NextResponse.json(data as MarketMetadataRow, { status: 201 });
-  } catch (err) {
-    logger.error({ err }, "POST /api/markets/metadata crashed");
+  } catch (error) {
+    logger.error({ error }, "Failed to save market metadata");
     return NextResponse.json(
       { error: "Failed to save market metadata" },
       { status: 500 },

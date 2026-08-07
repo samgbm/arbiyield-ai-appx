@@ -9,12 +9,12 @@ import type { ReactNode } from "react";
 import { z } from "zod";
 import { openai } from "@/lib/ai";
 import { MarketPreviewCard } from "@/components/markets/MarketPreviewCard";
-import { logger } from "@/lib/logger";
 import {
   isEndDateInFuture,
   isRelativeEndDate,
   normalizeMarketEndDate,
 } from "@/utils/marketDates";
+import { logger } from "@/utils/logger";
 
 /**
  * Server messages stored in AI state for multi-turn Market Creator chat.
@@ -111,6 +111,7 @@ export async function submitUserMessage(
 
   const requestId = crypto.randomUUID();
   const log = logger.child({ requestId, action: "submitUserMessage" });
+  logger.info({ prompt: content }, "Initiating AI market generation");
   log.info({ contentPreview: content.slice(0, 120) }, "Market creator turn");
 
   const history = getMutableAIState();
@@ -121,125 +122,146 @@ export async function submitUserMessage(
     { role: "user", content },
   ]);
 
-  const result = await streamUI({
-    model: openai("gpt-4o"),
-    system: SYSTEM_PROMPT,
-    messages: history.get() as ServerMessage[],
-    toolChoice: "auto",
-    text: ({ content: textContent, done }) => {
-      if (done) {
-        history.done([
-          ...(history.get() as ServerMessage[]),
-          { role: "assistant", content: textContent },
-        ]);
-      }
+  try {
+    const result = await streamUI({
+      model: openai("gpt-4o"),
+      system: SYSTEM_PROMPT,
+      messages: history.get() as ServerMessage[],
+      toolChoice: "auto",
+      text: ({ content: textContent, done }) => {
+        if (done) {
+          history.done([
+            ...(history.get() as ServerMessage[]),
+            { role: "assistant", content: textContent },
+          ]);
+        }
 
-      return (
-        <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-          {textContent}
-        </div>
-      );
-    },
-    tools: {
-      generateMarketCard: {
-        description:
-          "Call ONLY after the user has provided title, description, category, and endDate. Never invent missing fields.",
-        inputSchema: z.object({
-          title: z
-            .string()
-            .min(8)
-            .describe("Short YES/NO market question confirmed by the user"),
-          description: z
-            .string()
-            .min(24)
-            .describe(
-              "Resolution criteria and public data source confirmed by the user",
-            ),
-          category: z
-            .enum(CATEGORIES)
-            .describe("Market category confirmed by the user"),
-          endDate: z
-            .string()
-            .describe(
-              'Future end: ISO date OR relative string like "in 20 seconds" / "in 30 seconds" (pass relative strings unchanged)',
-            ),
-        }),
-        generate: async function* ({
-          title,
-          description,
-          category,
-          endDate,
-        }: {
-          title: string;
-          description: string;
-          category: (typeof CATEGORIES)[number];
-          endDate: string;
-        }) {
-          yield (
-            <div className="animate-pulse rounded-xl border border-border bg-secondary px-4 py-3 text-sm text-[var(--muted)]">
-              Checking market details…
-            </div>
-          );
-
-          const missing = missingMarketFields({
+        return (
+          <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+            {textContent}
+          </div>
+        );
+      },
+      tools: {
+        generateMarketCard: {
+          description:
+            "Call ONLY after the user has provided title, description, category, and endDate. Never invent missing fields.",
+          inputSchema: z.object({
+            title: z
+              .string()
+              .min(8)
+              .describe("Short YES/NO market question confirmed by the user"),
+            description: z
+              .string()
+              .min(24)
+              .describe(
+                "Resolution criteria and public data source confirmed by the user",
+              ),
+            category: z
+              .enum(CATEGORIES)
+              .describe("Market category confirmed by the user"),
+            endDate: z
+              .string()
+              .describe(
+                'Future end: ISO date OR relative string like "in 20 seconds" / "in 30 seconds" (pass relative strings unchanged)',
+              ),
+          }),
+          generate: async function* ({
             title,
             description,
             category,
             endDate,
-          });
-
-          if (missing.length > 0) {
-            const ask = `I still need: ${missing.join("; ")}. Please reply with those details and I’ll generate the deploy card.`;
-            history.done([
-              ...(history.get() as ServerMessage[]),
-              { role: "assistant", content: ask },
-            ]);
-            log.info({ missing }, "Blocked incomplete generateMarketCard call");
-            return (
-              <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                {ask}
+          }: {
+            title: string;
+            description: string;
+            category: (typeof CATEGORIES)[number];
+            endDate: string;
+          }) {
+            yield (
+              <div className="animate-pulse rounded-xl border border-border bg-secondary px-4 py-3 text-sm text-[var(--muted)]">
+                Checking market details…
               </div>
             );
-          }
 
-          // Keep relative offsets raw so Deploy evaluates them at click time.
-          const cardEndDate = isRelativeEndDate(endDate)
-            ? endDate.trim()
-            : normalizeMarketEndDate(endDate);
+            const missing = missingMarketFields({
+              title,
+              description,
+              category,
+              endDate,
+            });
 
-          history.done([
-            ...(history.get() as ServerMessage[]),
-            {
-              role: "assistant",
-              content: `Generated market card: ${title}`,
-            },
-          ]);
+            if (missing.length > 0) {
+              const ask = `I still need: ${missing.join("; ")}. Please reply with those details and I’ll generate the deploy card.`;
+              history.done([
+                ...(history.get() as ServerMessage[]),
+                { role: "assistant", content: ask },
+              ]);
+              log.info({ missing }, "Blocked incomplete generateMarketCard call");
+              return (
+                <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                  {ask}
+                </div>
+              );
+            }
 
-          log.info(
-            { title, category, endDate: cardEndDate, rawEndDate: endDate },
-            "Streaming MarketPreviewCard via generateMarketCard tool",
-          );
+            // Keep relative offsets raw so Deploy evaluates them at click time.
+            const cardEndDate = isRelativeEndDate(endDate)
+              ? endDate.trim()
+              : normalizeMarketEndDate(endDate);
 
-          return (
-            <div className="w-full min-w-0" data-testid="generative-market-card">
-              <MarketPreviewCard
-                title={title.trim()}
-                description={description.trim()}
-                category={category}
-                endDate={cardEndDate}
-              />
-            </div>
-          );
+            history.done([
+              ...(history.get() as ServerMessage[]),
+              {
+                role: "assistant",
+                content: `Generated market card: ${title}`,
+              },
+            ]);
+
+            log.info(
+              { title, category, endDate: cardEndDate, rawEndDate: endDate },
+              "Streaming MarketPreviewCard via generateMarketCard tool",
+            );
+
+            return (
+              <div className="w-full min-w-0" data-testid="generative-market-card">
+                <MarketPreviewCard
+                  title={title.trim()}
+                  description={description.trim()}
+                  category={category}
+                  endDate={cardEndDate}
+                />
+              </div>
+            );
+          },
         },
       },
-    },
-  });
+    });
 
-  return {
-    id: Date.now(),
-    role: "assistant",
-    display: result.value,
-  };
+    return {
+      id: Date.now(),
+      role: "assistant",
+      display: result.value,
+    };
+  } catch (error) {
+    logger.error({ error }, "AI generation failed");
+    const message =
+      error instanceof Error
+        ? error.message
+        : "AI generation failed. Please try again.";
+    history.done([
+      ...(history.get() as ServerMessage[]),
+      { role: "assistant", content: message },
+    ]);
+    return {
+      id: Date.now(),
+      role: "assistant",
+      display: (
+        <div className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--danger)]">
+          {message}
+        </div>
+      ),
+    };
+  }
 }
 
 export type AIState = ServerMessage[];

@@ -1,6 +1,9 @@
 /**
  * Turn wagmi / viem / wallet RPC failures into short UI copy.
+ * Raw errors are logged via pino for developer visibility.
  */
+
+import { logger } from "@/utils/logger";
 
 function asErrorText(error: unknown): string {
   if (error == null) return "";
@@ -53,10 +56,39 @@ function getErrorCode(error: unknown): number | string | undefined {
   return undefined;
 }
 
+function serializeRawError(error: unknown): unknown {
+  if (error instanceof Error) {
+    const withExtras = error as Error & {
+      shortMessage?: string;
+      code?: number | string;
+      cause?: unknown;
+    };
+    return {
+      name: withExtras.name,
+      message: withExtras.message,
+      shortMessage: withExtras.shortMessage,
+      code: withExtras.code,
+      cause:
+        withExtras.cause instanceof Error
+          ? {
+              name: withExtras.cause.name,
+              message: withExtras.cause.message,
+            }
+          : withExtras.cause,
+    };
+  }
+  return error;
+}
+
 /**
  * Map a raw RPC / wallet / contract error into a human-readable string.
  */
 export function parseRPCError(error: unknown): string {
+  logger.warn(
+    { rawError: serializeRawError(error) },
+    "RPC Transaction Failed",
+  );
+
   const code = getErrorCode(error);
   const text = asErrorText(error);
   const lower = text.toLowerCase();
