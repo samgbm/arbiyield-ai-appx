@@ -6,20 +6,23 @@ import { useEffect, useState } from "react";
 import {
   Briefcase,
   ChartCandlestick,
+  CloudRain,
   FileJson,
   LayoutDashboard,
   Menu,
   ShieldCheck,
   Sparkles,
+  Tractor,
   TrendingUp,
+  Truck,
   X,
   Zap,
 } from "lucide-react";
 import { useDemoStore } from "@/store/useDemoStore";
 
 /**
- * App Switcher sidebar — toggles between core Yield Dashboard and the
- * Prediction Markets hub without disrupting either module.
+ * App Switcher sidebar — toggles between Yield, Prediction Markets, and the
+ * El Niño Climate Resilience module.
  * Desktop: fixed left rail. Mobile: slide-over drawer + overlay.
  */
 
@@ -29,36 +32,67 @@ const NAV_ITEMS = [
     label: "Yield Dashboard",
     description: "AI strategies · Stylus ledger",
     icon: LayoutDashboard,
+    testId: "nav-yield-dashboard",
   },
   {
     href: "/strategies",
     label: "Yield Strategies",
     description: "On-chain sleeves · Stylus hub",
     icon: TrendingUp,
+    testId: "nav-yield-strategies",
   },
   {
     href: "/markets",
     label: "Prediction Markets",
     description: "PMM hub · create & trade",
     icon: ChartCandlestick,
+    testId: "nav-markets",
   },
   {
     href: "/markets/portfolio",
     label: "Portfolio",
     description: "Your bets across markets",
     icon: Briefcase,
+    testId: "nav-portfolio",
   },
   {
     href: "/markets/create",
     label: "Create Market",
     description: "AI generative deploy card",
     icon: Sparkles,
+    testId: "nav-create-market",
   },
   {
     href: "/docs",
     label: "API Docs",
     description: "OpenAPI · Try it out",
     icon: FileJson,
+    testId: "nav-docs",
+  },
+] as const;
+
+/** El Niño Climate Resilience module routes (Increment 1 shell). */
+export const EL_NINO_NAV_ITEMS = [
+  {
+    href: "/el-nino/logistics",
+    label: "Logistics Tracker",
+    description: "Aid route provenance · QR",
+    icon: Truck,
+    testId: "nav-el-nino-logistics",
+  },
+  {
+    href: "/el-nino/onboarding",
+    label: "Farmer Onboarding",
+    description: "Batch register cooperatives",
+    icon: Tractor,
+    testId: "nav-el-nino-onboarding",
+  },
+  {
+    href: "/el-nino/oracle",
+    label: "Oracle Trigger",
+    description: "Rainfall → zero-click payout",
+    icon: CloudRain,
+    testId: "nav-el-nino-oracle",
   },
 ] as const;
 
@@ -104,7 +138,11 @@ export function Sidebar() {
         <p className="mt-1 text-sm font-bold text-foreground">ArbiYield AI</p>
       </div>
 
-      <nav aria-label="Modules" className="flex flex-1 flex-col gap-1 p-3">
+      <nav
+        aria-label="Modules"
+        data-testid="app-sidebar-nav"
+        className="flex flex-1 flex-col gap-1 overflow-y-auto p-3"
+      >
         {NAV_ITEMS.map((item) => {
           const active = isActivePath(pathname, item.href);
           const Icon = item.icon;
@@ -112,6 +150,7 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              data-testid={item.testId}
               onClick={() => setOpenedForPath(null)}
               className={`flex min-h-12 items-start gap-3 rounded-xl px-3 py-2.5 transition ${
                 active
@@ -132,6 +171,42 @@ export function Sidebar() {
             </Link>
           );
         })}
+
+        <div className="my-2 border-t border-border pt-3">
+          <p className="mb-1 px-3 font-mono-explorer text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+            El Niño Resilience
+          </p>
+          {EL_NINO_NAV_ITEMS.map((item) => {
+            const active = isActivePath(pathname, item.href);
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                data-testid={item.testId}
+                onClick={() => setOpenedForPath(null)}
+                className={`flex min-h-12 items-start gap-3 rounded-xl px-3 py-2.5 transition ${
+                  active
+                    ? "bg-sky-500/12 text-foreground ring-1 ring-sky-500/35"
+                    : "text-[var(--accent)] hover:bg-[color-mix(in_oklab,var(--foreground)_6%,transparent)] hover:text-foreground"
+                }`}
+              >
+                <Icon
+                  className={`mt-0.5 size-5 shrink-0 ${active ? "text-sky-500" : ""}`}
+                  aria-hidden
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold">
+                    {item.label}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-[var(--muted)]">
+                    {item.description}
+                  </span>
+                </span>
+              </Link>
+            );
+          })}
+        </div>
       </nav>
 
       {/* Live-pitch fail-safe + system status */}
