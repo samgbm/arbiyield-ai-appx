@@ -26,6 +26,17 @@ const envSchema = z.object({
     .min(1, "NEXT_PUBLIC_SUPABASE_ANON_KEY is required"),
   /** OpenAI key for strategy + market-creator AI routes (server-only). */
   OPENAI_API_KEY: z.string().min(1, "OPENAI_API_KEY is required"),
+  /**
+   * Optional hex private key for `npm run seed` (Arbitrum Sepolia seeder).
+   * Not required at app runtime — validated when present so .env stays typed.
+   */
+  SEEDER_PRIVATE_KEY: z
+    .string()
+    .regex(
+      /^(0x)?[a-fA-F0-9]{64}$/,
+      "SEEDER_PRIVATE_KEY must be a 32-byte hex private key",
+    )
+    .optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -58,6 +69,7 @@ function validateEnv(): Env {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    SEEDER_PRIVATE_KEY: process.env.SEEDER_PRIVATE_KEY || undefined,
   });
 
   if (!parsed.success) {
