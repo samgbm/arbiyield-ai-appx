@@ -11,6 +11,7 @@ import {
   Menu,
   ShieldCheck,
   Sparkles,
+  TrendingUp,
   X,
   Zap,
 } from "lucide-react";
@@ -28,6 +29,12 @@ const NAV_ITEMS = [
     label: "Yield Dashboard",
     description: "AI strategies · Stylus ledger",
     icon: LayoutDashboard,
+  },
+  {
+    href: "/strategies",
+    label: "Yield Strategies",
+    description: "On-chain sleeves · Stylus hub",
+    icon: TrendingUp,
   },
   {
     href: "/markets",

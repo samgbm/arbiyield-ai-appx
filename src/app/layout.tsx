@@ -65,7 +65,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full font-sans" suppressHydrationWarning>
         <ThemeProvider>
           <Web3Provider>
-            {/* App shell: fixed Sidebar + scrollable main column */}
+            {/* App shell: fixed Sidebar (left) + flex-1 page column (right) */}
             <div className="flex min-h-full w-full">
               <Sidebar />
               <div className="flex min-h-full min-w-0 flex-1 flex-col md:pl-72">
