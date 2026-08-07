@@ -1,7 +1,7 @@
 //! El Niño Climate Resilience — Arbitrum Stylus core
 //!
 //! Holds parametric farmer insurance policies and immutable aid-logistics
-//! checkpoint hashes. Increment 5 adds Climate Data Relay → zero-click payouts.
+//! checkpoint hashes. Increment 6 adds tamper-proof logistics provenance.
 
 #![cfg_attr(not(any(test, feature = "export-abi")), no_main)]
 extern crate alloc;
@@ -29,6 +29,8 @@ pub const FLOOD_THRESHOLD_MM: u64 = 50;
 sol! {
     /// Emitted when a farmer's parametric coverage is disbursed (simulated USDC).
     event PayoutDisbursed(address indexed farmer, string location, uint256 amount);
+    /// Emitted when an aid shipment checkpoint hash is sealed on-chain.
+    event AidCheckpointLogged(bytes32 indexed batch_hash, string location, uint256 timestamp);
 }
 
 /// Parametric insurance policy for a single farmer (Stylus storage).
@@ -42,7 +44,6 @@ pub struct FarmerPolicy {
 
 /// Immutable aid-route checkpoint (Stylus storage).
 #[storage]
-#[allow(dead_code)] // Wired in Increment 6 (logistics hashing).
 pub struct AidCheckpoint {
     batch_hash: StorageB256,
     location_name: StorageString,
@@ -79,7 +80,6 @@ pub struct ElNinoResilience {
     /// Iterable registry of registered farmer addresses (mappings alone are not iterable).
     farmer_ids: StorageVec<StorageAddress>,
     /// `mapping(bytes32 => AidCheckpoint) aid_batches`
-    #[allow(dead_code)] // Wired in Increment 6.
     aid_batches: StorageMap<B256, AidCheckpoint>,
 }
 
@@ -206,6 +206,65 @@ impl ElNinoResilience {
         }
 
         Ok(paid_count)
+    }
+
+    /// Seal an aid-route checkpoint hash (Walkthrough 1 / NFR-1 immutability).
+    ///
+    /// Reverts if `batch_hash` was already logged — historical provenance cannot
+    /// be overwritten. Timestamp is taken from the EVM block clock via the Stylus VM.
+    pub fn log_aid_checkpoint(
+        &mut self,
+        batch_hash: B256,
+        location_name: String,
+    ) -> Result<(), Vec<u8>> {
+        let existing_ts = self.aid_batches.getter(batch_hash).timestamp.get();
+        if existing_ts > U256::ZERO {
+            return Err(err(
+                "log_aid_checkpoint: batch_hash already logged (immutable)",
+            ));
+        }
+
+        let timestamp = U256::from(self.vm().block_timestamp());
+
+        {
+            let mut checkpoint = self.aid_batches.setter(batch_hash);
+            checkpoint.batch_hash.set(batch_hash);
+            checkpoint.location_name.set_str(&location_name);
+            checkpoint.timestamp.set(timestamp);
+            checkpoint.is_flagged.set(false);
+        }
+
+        self.vm().log(AidCheckpointLogged {
+            batch_hash,
+            location: location_name,
+            timestamp,
+        });
+
+        Ok(())
+    }
+
+    /// QR / UI verification: `(location_name, timestamp, is_flagged)`.
+    pub fn verify_aid_batch(&self, batch_hash: B256) -> (String, U256, bool) {
+        let checkpoint = self.aid_batches.getter(batch_hash);
+        (
+            checkpoint.location_name.get_string(),
+            checkpoint.timestamp.get(),
+            checkpoint.is_flagged.get(),
+        )
+    }
+
+    /// Mark a shipment as compromised / route-deviated (admin / automated flagger).
+    pub fn flag_aid_batch(&mut self, batch_hash: B256) -> Result<(), Vec<u8>> {
+        self.require_admin()?;
+
+        let existing_ts = self.aid_batches.getter(batch_hash).timestamp.get();
+        if existing_ts == U256::ZERO {
+            return Err(err("flag_aid_batch: unknown batch_hash"));
+        }
+
+        let mut checkpoint = self.aid_batches.setter(batch_hash);
+        checkpoint.is_flagged.set(true);
+        Ok(())
     }
 }
 
@@ -400,5 +459,52 @@ mod test {
             .process_climate_relay(String::from("Piura"), U256::from(85))
             .expect_err("spoofed relayer must fail");
         assert!(String::from_utf8_lossy(&err).contains("unauthorized"));
+    }
+
+    #[test]
+    fn test_aid_logistics_tracker() {
+        let vm = TestVM::default();
+        // TestVM defaults timestamp to 0; set a realistic block time for provenance.
+        vm.set_block_timestamp(1_720_000_000);
+        let mut contract = setup_initialized(&vm);
+
+        // Deterministic SHA-256-style payload for the QR / bag seal.
+        let batch_hash = B256::from([
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+            0xff, 0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0,
+            0xd0, 0xe0, 0xf0, 0x01,
+        ]);
+
+        // Action 1 — log checkpoint at Lima Port.
+        contract
+            .log_aid_checkpoint(batch_hash, String::from("Lima Port"))
+            .expect("first log should succeed");
+
+        // Action 2 — verify provenance.
+        let (location, timestamp, flagged) = contract.verify_aid_batch(batch_hash);
+        assert_eq!(location, "Lima Port");
+        assert!(timestamp > U256::ZERO);
+        assert!(!flagged);
+
+        // Immutability — second log with same hash must revert.
+        let overwrite = contract
+            .log_aid_checkpoint(batch_hash, String::from("Piura Warehouse"))
+            .expect_err("overwrite must revert");
+        assert!(
+            String::from_utf8_lossy(&overwrite).contains("immutable"),
+            "unexpected: {}",
+            String::from_utf8_lossy(&overwrite)
+        );
+
+        // Action 3 — admin flags compromised shipment.
+        contract
+            .flag_aid_batch(batch_hash)
+            .expect("admin flag should succeed");
+
+        // Action 4 — verify flagged state.
+        let (location2, timestamp2, flagged2) = contract.verify_aid_batch(batch_hash);
+        assert_eq!(location2, "Lima Port");
+        assert_eq!(timestamp2, timestamp);
+        assert!(flagged2);
     }
 }
