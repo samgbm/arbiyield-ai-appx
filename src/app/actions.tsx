@@ -10,7 +10,11 @@ import { z } from "zod";
 import { openai } from "@/lib/ai";
 import { MarketPreviewCard } from "@/components/markets/MarketPreviewCard";
 import { logger } from "@/lib/logger";
-import { normalizeMarketEndDate } from "@/utils/marketDates";
+import {
+  isEndDateInFuture,
+  isRelativeEndDate,
+  normalizeMarketEndDate,
+} from "@/utils/marketDates";
 
 /**
  * Server messages stored in AI state for multi-turn Market Creator chat.
@@ -35,7 +39,10 @@ Help the user define a clear YES/NO market. You MUST collect ALL four fields fro
 1. title — a concise YES/NO question (e.g. "Will Brazil win the next FIFA World Cup?")
 2. description — resolution criteria AND a public data source (how it resolves)
 3. category — exactly one of: Crypto | Culture | AI | Sports | Macro
-4. endDate — an explicit future date the user confirms (ISO preferred, e.g. 2026-12-31)
+4. endDate — a FUTURE end time the user confirms. Accept either:
+   - absolute ISO/date (e.g. 2026-12-31), OR
+   - relative demo offsets exactly as typed: "in 20 seconds", "in 30 seconds", "+45s", "5m"
+   Reject past absolute dates. For relative offsets, pass the relative string through unchanged (do not convert to ISO yourself).
 
 Conversation rules:
 - Ask for missing fields. Prefer 1–2 short questions at a time.
@@ -70,8 +77,25 @@ function missingMarketFields(input: {
   ) {
     missing.push("category (Crypto, Culture, AI, Sports, or Macro)");
   }
-  if (!endDate || placeholder.test(endDate) || Number.isNaN(Date.parse(endDate))) {
-    missing.push("endDate (a future date, e.g. 2026-12-31)");
+  if (!endDate || placeholder.test(endDate)) {
+    missing.push(
+      'endDate (future date or relative like "in 30 seconds")',
+    );
+  } else {
+    try {
+      if (!isRelativeEndDate(endDate)) {
+        normalizeMarketEndDate(endDate);
+      }
+      if (!isEndDateInFuture(endDate)) {
+        missing.push(
+          'endDate (must be in the future, e.g. 2026-12-31 or "in 30 seconds")',
+        );
+      }
+    } catch {
+      missing.push(
+        'endDate (future date or relative like "in 30 seconds")',
+      );
+    }
   }
 
   return missing;
@@ -137,7 +161,7 @@ export async function submitUserMessage(
           endDate: z
             .string()
             .describe(
-              "Future end date confirmed by the user (ISO-8601 preferred)",
+              'Future end: ISO date OR relative string like "in 20 seconds" / "in 30 seconds" (pass relative strings unchanged)',
             ),
         }),
         generate: async function* ({
@@ -178,7 +202,10 @@ export async function submitUserMessage(
             );
           }
 
-          const normalizedEnd = normalizeMarketEndDate(endDate);
+          // Keep relative offsets raw so Deploy evaluates them at click time.
+          const cardEndDate = isRelativeEndDate(endDate)
+            ? endDate.trim()
+            : normalizeMarketEndDate(endDate);
 
           history.done([
             ...(history.get() as ServerMessage[]),
@@ -189,7 +216,7 @@ export async function submitUserMessage(
           ]);
 
           log.info(
-            { title, category, endDate: normalizedEnd, rawEndDate: endDate },
+            { title, category, endDate: cardEndDate, rawEndDate: endDate },
             "Streaming MarketPreviewCard via generateMarketCard tool",
           );
 
@@ -199,7 +226,7 @@ export async function submitUserMessage(
                 title={title.trim()}
                 description={description.trim()}
                 category={category}
-                endDate={normalizedEnd}
+                endDate={cardEndDate}
               />
             </div>
           );

@@ -10,6 +10,8 @@ import {
   MarketChart,
   type YesProbabilityPoint,
 } from "@/components/markets/MarketChart";
+import { MarketAdminPanel } from "@/components/markets/MarketAdminPanel";
+import { MarketEndCountdown } from "@/components/markets/MarketEndCountdown";
 import { TradePanel } from "@/components/markets/TradePanel";
 import { UserPositions } from "@/components/markets/UserPositions";
 import { mockMarkets, type MockMarket } from "@/data/mockMarkets";
@@ -43,11 +45,20 @@ function seriesFromLiveOdds(yesPct: number, seed: string): YesProbabilityPoint[]
 function MarketDetailView({
   market,
   marketId,
+  creatorAddress,
+  isResolved,
+  winningOutcome,
+  endTimestamp,
   onTradeSuccess,
   chartLabel,
 }: {
   market: MockMarket;
   marketId: string;
+  creatorAddress?: string;
+  isResolved?: boolean;
+  winningOutcome?: number;
+  /** Unix seconds from chain (or demo endDate). */
+  endTimestamp?: number | bigint;
   onTradeSuccess?: () => void;
   chartLabel?: string;
 }) {
@@ -56,6 +67,14 @@ function MarketDetailView({
     () => seriesFromLiveOdds(yesPct, market.id),
     [yesPct, market.id],
   );
+
+  const statusLabel = isResolved
+    ? `resolved (${winningOutcome === 1 ? "YES" : winningOutcome === 0 ? "NO" : "?"})`
+    : market.status;
+
+  const resolvedEndTs =
+    endTimestamp ??
+    BigInt(Math.floor(Date.parse(market.endDate) / 1000));
 
   return (
     <div className="hero-wash">
@@ -68,12 +87,28 @@ function MarketDetailView({
           All markets
         </Link>
 
+        {creatorAddress ? (
+          <MarketAdminPanel
+            marketId={marketId}
+            creatorAddress={creatorAddress}
+            isResolved={Boolean(isResolved)}
+            endTimestamp={resolvedEndTs}
+            onResolved={() => onTradeSuccess?.()}
+          />
+        ) : null}
+
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.85fr)] lg:items-start">
           <div className="space-y-5">
             <div className="space-y-3">
-              <p className="font-mono-explorer text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-                {market.category} · {formatMarketEndLabel(market.endDate)}
-              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-mono-explorer text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+                  {market.category} · {formatMarketEndLabel(market.endDate)}
+                </p>
+                <MarketEndCountdown
+                  endTimestamp={resolvedEndTs}
+                  isResolved={Boolean(isResolved)}
+                />
+              </div>
               <h1 className="font-display text-3xl tracking-tight text-foreground sm:text-4xl lg:text-5xl">
                 {market.title}
               </h1>
@@ -85,7 +120,7 @@ function MarketDetailView({
                 {market.liquidityPool.toLocaleString(undefined, {
                   maximumFractionDigits: 4,
                 })}{" "}
-                ETH · Yes {yesPct.toFixed(1)}% · Status: {market.status}
+                ETH · Yes {yesPct.toFixed(1)}% · Status: {statusLabel}
                 {chartLabel ? ` · ${chartLabel}` : ""}
               </p>
             </div>
@@ -97,14 +132,18 @@ function MarketDetailView({
             />
           </div>
 
-          <aside className="lg:sticky lg:top-24 space-y-0">
+          <aside className="space-y-0 lg:sticky lg:top-24">
             <TradePanel
               marketId={marketId}
               marketTitle={market.title}
+              isResolved={Boolean(isResolved)}
+              winningOutcome={winningOutcome}
               onTradeSuccess={() => onTradeSuccess?.()}
             />
             <UserPositions
               marketId={marketId}
+              isResolved={Boolean(isResolved)}
+              winningOutcome={winningOutcome}
               onCashoutSuccess={() => onTradeSuccess?.()}
             />
           </aside>
@@ -179,6 +218,7 @@ export default function MarketDetailPage() {
         market={market}
         marketId={market.id}
         chartLabel="Demo series"
+        isResolved={false}
       />
     );
   }
@@ -282,12 +322,19 @@ export default function MarketDetailPage() {
     );
   }
 
+  const endTimestamp = rawMarket[1];
+  const isResolved = Boolean(rawMarket[2]);
+  const winningOutcome = Number(rawMarket[3]);
   const market = parseOnChainMarket(Number(id), rawMarket);
 
   return (
     <MarketDetailView
       market={market}
       marketId={id!}
+      creatorAddress={creator}
+      isResolved={isResolved}
+      winningOutcome={winningOutcome}
+      endTimestamp={endTimestamp}
       chartLabel="On-chain pools"
       onTradeSuccess={() => {
         void refetch();

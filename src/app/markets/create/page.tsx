@@ -13,7 +13,7 @@ import type { AI } from "@/app/actions";
 const SUGGESTIONS = [
   "I want a market about who will win the next World Cup",
   "Will ETH hit $10k before 2027?",
-  "Will an AI project win ETH Lima 2026?",
+  'Demo market ending in 30 seconds — title "Will this resolve YES?"',
 ] as const;
 
 /**
@@ -105,7 +105,7 @@ export default function CreateMarketPage() {
             </p>
             <p className="max-w-md text-sm text-[var(--accent)]">
               Prompt an idea. The strategist will ask for title, resolution
-              criteria, category, and end date — then stream a Generative UI
+              criteria, category, and end date (or “in 30 seconds”) — then stream a Generative UI
               deploy card.
             </p>
             <div className="mt-2 grid w-full gap-2 sm:grid-cols-1">

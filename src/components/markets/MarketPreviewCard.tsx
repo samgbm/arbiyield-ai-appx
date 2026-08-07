@@ -21,6 +21,9 @@ import { estimateArbitrumSepoliaFees } from "@/lib/gas";
 import { PMM_CONTRACT_ADDRESS, pmmABI } from "@/lib/pmmContract";
 import {
   endDateToUnixSeconds,
+  formatEndDateInputLabel,
+  isEndDateInFuture,
+  isRelativeEndDate,
   normalizeMarketEndDate,
 } from "@/utils/marketDates";
 
@@ -106,18 +109,25 @@ export function MarketPreviewCard({
     },
   });
 
-  const normalizedEnd = useMemo(
-    () => normalizeMarketEndDate(endDate),
-    [endDate],
-  );
+  const isRelative = isRelativeEndDate(endDate);
+  const endLabel = formatEndDateInputLabel(endDate);
 
-  const endTimestamp = useMemo(() => {
+  const normalizedEnd = useMemo(() => {
     try {
-      return endDateToUnixSeconds(normalizedEnd);
+      // Absolute dates only — relative offsets are resolved at Deploy click.
+      if (isRelativeEndDate(endDate)) return null;
+      return normalizeMarketEndDate(endDate);
     } catch {
       return null;
     }
-  }, [normalizedEnd]);
+  }, [endDate]);
+
+  const endIsFuture = useMemo(
+    () => isEndDateInFuture(endDate),
+    [endDate],
+  );
+
+  const canDeploy = endIsFuture && (isRelative || normalizedEnd != null);
 
   const marketIdFromLogs = useMemo(
     () => marketIdFromReceipt(isSuccess, receipt),
@@ -140,7 +150,18 @@ export function MarketPreviewCard({
       return;
     }
 
-    if (endTimestamp === null) {
+    if (!endIsFuture) {
+      setLocalError(
+        `End date "${endLabel}" is in the past. Choose a future date (or "in 30 seconds") to deploy.`,
+      );
+      return;
+    }
+
+    let endTimestamp: bigint;
+    try {
+      // Relative inputs ("in 20 seconds") are evaluated at click time.
+      endTimestamp = endDateToUnixSeconds(endDate);
+    } catch {
       setLocalError("Invalid end date — cannot deploy.");
       return;
     }
@@ -176,8 +197,13 @@ export function MarketPreviewCard({
   }
 
   const busy = isPending || isConfirming;
+  const pastDateError =
+    !endIsFuture
+      ? `End date "${endLabel}" is in the past. Use a future date or "in 20 seconds" / "in 30 seconds".`
+      : null;
   const errorMessage =
     localError ??
+    pastDateError ??
     (writeError ? (writeError.message.split("\n")[0] ?? "Transaction failed") : null);
 
   return (
@@ -206,16 +232,23 @@ export function MarketPreviewCard({
           </span>
           <span className="inline-flex items-center gap-1.5 rounded-md bg-background px-2.5 py-1 text-xs font-semibold text-foreground ring-1 ring-border">
             <CalendarClock className="size-3.5 text-primary" aria-hidden />
-            <time dateTime={normalizedEnd}>
-              {normalizedEnd.slice(0, 10)}
+            <time dateTime={normalizedEnd ?? undefined}>
+              {isRelative ? `${endLabel} (from deploy)` : endLabel}
             </time>
           </span>
         </div>
 
+        {isRelative && (
+          <p className="text-xs text-[var(--muted)]">
+            Relative end times start when you click Deploy (e.g. 20s after the
+            transaction is sent).
+          </p>
+        )}
+
         <button
           type="button"
           onClick={() => void handleDeploy()}
-          disabled={busy || isSuccess || endTimestamp === null}
+          disabled={busy || isSuccess || !canDeploy}
           data-testid="deploy-button"
           className={
             isSuccess

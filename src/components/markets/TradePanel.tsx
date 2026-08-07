@@ -41,6 +41,9 @@ type TradePanelProps = {
   /** On-chain market id (string/number). Required for live Stylus trades. */
   marketId?: string | number;
   marketTitle?: string;
+  /** When true, hide buy controls and show a resolved message. */
+  isResolved?: boolean;
+  winningOutcome?: number;
   /** Demo / test hook — still invoked after a successful live trade. */
   onSubmit?: (payload: { side: TradeSide; amount: number }) => void;
   /** Called after a confirmed on-chain buy so the parent can refetch pools. */
@@ -54,6 +57,8 @@ type TradePanelProps = {
 export function TradePanel({
   marketId,
   marketTitle,
+  isResolved = false,
+  winningOutcome,
   onSubmit,
   onTradeSuccess,
 }: TradePanelProps) {
@@ -163,6 +168,44 @@ export function TradePanel({
     reset();
     notifiedHash.current = null;
     await placeOnChainTrade();
+  }
+
+  if (isResolved) {
+    const winnerLabel =
+      winningOutcome === OUTCOME_YES
+        ? "YES"
+        : winningOutcome === OUTCOME_NO
+          ? "NO"
+          : null;
+    return (
+      <div
+        data-testid="trade-panel-resolved"
+        className="surface relative flex flex-col gap-3 overflow-hidden p-4 sm:p-5"
+        aria-label="Trade panel resolved"
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,color-mix(in_oklab,var(--primary)_10%,transparent),transparent)]"
+        />
+        <p className="relative font-mono-explorer text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">
+          Place trade
+        </p>
+        <p className="relative text-lg font-extrabold tracking-tight text-foreground">
+          Market Resolved
+        </p>
+        <p className="relative text-sm text-[var(--accent)]">
+          Trading is closed
+          {winnerLabel ? (
+            <>
+              {" "}
+              · Winning outcome:{" "}
+              <span className="font-bold text-foreground">{winnerLabel}</span>
+            </>
+          ) : null}
+          . Claim from Your Positions if you held the winning side.
+        </p>
+      </div>
+    );
   }
 
   return (

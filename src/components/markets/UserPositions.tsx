@@ -28,6 +28,8 @@ type PositionView = {
   claimed: boolean;
 };
 
+type TxAction = "cashout" | "claim";
+
 function shortTxHash(hash: `0x${string}`) {
   return `${hash.slice(0, 10)}…${hash.slice(-4)}`;
 }
@@ -39,23 +41,29 @@ function formatEth(value: bigint) {
 
 type UserPositionsProps = {
   marketId: string | number;
-  /** Refetch market pools after a cashout settles. */
+  isResolved?: boolean;
+  /** 0 = No, 1 = Yes — only meaningful when isResolved. */
+  winningOutcome?: number;
+  /** Refetch market / positions after cashout or claim. */
   onCashoutSuccess?: () => void;
 };
 
 /**
- * Shows the connected wallet's Yes/No positions for a market and allows
- * pre-resolution `cashoutShares` redemptions.
+ * Shows the connected wallet's Yes/No positions for a market.
+ * Active → Instant Cashout; Resolved winner → Claim Winnings; loser → badge.
  */
 export function UserPositions({
   marketId,
+  isResolved = false,
+  winningOutcome,
   onCashoutSuccess,
 }: UserPositionsProps) {
   const isDemoMode = useDemoStore((s) => s.isDemoMode);
   const { address, isConnected } = useAccount();
   const publicClient = usePublicClient({ chainId: ARBITRUM_SEPOLIA_CHAIN_ID });
   const notifiedHash = useRef<`0x${string}` | null>(null);
-  const [cashoutOutcomeId, setCashoutOutcomeId] = useState<number | null>(null);
+  const [activeOutcomeId, setActiveOutcomeId] = useState<number | null>(null);
+  const [txAction, setTxAction] = useState<TxAction>("cashout");
 
   const marketIdBig = useMemo(() => {
     try {
@@ -116,7 +124,8 @@ export function UserPositions({
       const result = positionResults[i];
       if (result.status !== "success" || result.result == null) continue;
       const [shares, , floor, claimed] = result.result;
-      if (shares <= BigInt(0)) continue;
+      // Keep claimed winning rows visible after claim zeros shares.
+      if (shares <= BigInt(0) && !claimed) continue;
       rows.push({
         outcomeId: ids[i]!,
         outcome: labels[i]!,
@@ -133,8 +142,8 @@ export function UserPositions({
       {
         outcomeId: OUTCOME_YES,
         outcome: "Yes",
-        shares: BigInt("50000000000000000"), // 0.05 ETH
-        floor: BigInt("90000000000000000"), // 0.09 ETH preview
+        shares: BigInt("50000000000000000"),
+        floor: BigInt("90000000000000000"),
         claimed: false,
       },
     ],
@@ -144,17 +153,12 @@ export function UserPositions({
   const positions = isDemoMode ? demoPositions : livePositions;
   const busy = isPending || isConfirming;
 
-  async function handleCashout(outcomeId: number) {
-    if (isDemoMode) {
-      // Demo: pretend success by no-op write; UI already shows mock data.
-      return;
-    }
-    if (marketIdBig == null) return;
-
-    reset();
-    notifiedHash.current = null;
-    setCashoutOutcomeId(outcomeId);
-
+  async function withFees(
+    run: (fees: {
+      maxFeePerGas?: bigint;
+      maxPriorityFeePerGas?: bigint;
+    }) => void,
+  ) {
     let maxFeePerGas: bigint | undefined;
     let maxPriorityFeePerGas: bigint | undefined;
     if (publicClient) {
@@ -166,16 +170,56 @@ export function UserPositions({
         // Fall back to wallet defaults.
       }
     }
+    run({ maxFeePerGas, maxPriorityFeePerGas });
+  }
 
-    writeContract({
-      address: PMM_CONTRACT_ADDRESS,
-      abi: pmmABI,
-      functionName: "cashoutShares",
-      args: [marketIdBig, outcomeId],
-      chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
-      ...(maxFeePerGas != null
-        ? { maxFeePerGas, maxPriorityFeePerGas }
-        : {}),
+  async function handleCashout(outcomeId: number) {
+    if (isDemoMode || isResolved || marketIdBig == null) return;
+
+    reset();
+    notifiedHash.current = null;
+    setTxAction("cashout");
+    setActiveOutcomeId(outcomeId);
+
+    await withFees((fees) => {
+      writeContract({
+        address: PMM_CONTRACT_ADDRESS,
+        abi: pmmABI,
+        functionName: "cashoutShares",
+        args: [marketIdBig, outcomeId],
+        chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+        ...(fees.maxFeePerGas != null
+          ? {
+              maxFeePerGas: fees.maxFeePerGas,
+              maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
+            }
+          : {}),
+      });
+    });
+  }
+
+  async function handleClaim(outcomeId: number) {
+    if (isDemoMode || !isResolved || marketIdBig == null) return;
+
+    reset();
+    notifiedHash.current = null;
+    setTxAction("claim");
+    setActiveOutcomeId(outcomeId);
+
+    await withFees((fees) => {
+      writeContract({
+        address: PMM_CONTRACT_ADDRESS,
+        abi: pmmABI,
+        functionName: "claimWinnings",
+        args: [marketIdBig],
+        chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+        ...(fees.maxFeePerGas != null
+          ? {
+              maxFeePerGas: fees.maxFeePerGas,
+              maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
+            }
+          : {}),
+      });
     });
   }
 
@@ -226,8 +270,11 @@ export function UserPositions({
   }
 
   const errorMessage = writeError
-    ? (writeError.message.split("\n")[0] ?? "Cashout failed")
+    ? (writeError.message.split("\n")[0] ?? "Transaction failed")
     : null;
+
+  const successLabel =
+    txAction === "claim" ? "Winnings claimed" : "Cashout confirmed";
 
   return (
     <div
@@ -240,7 +287,11 @@ export function UserPositions({
             Your Positions
           </p>
           <p className="mt-1 text-sm font-semibold text-foreground">
-            {isDemoMode ? "Demo holdings" : "Active on-chain bets"}
+            {isDemoMode
+              ? "Demo holdings"
+              : isResolved
+                ? "Settled positions"
+                : "Active on-chain bets"}
           </p>
         </div>
         <Banknote className="size-5 text-primary" aria-hidden />
@@ -248,7 +299,16 @@ export function UserPositions({
 
       <ul className="space-y-3">
         {positions.map((pos) => {
-          const isThisBusy = busy && cashoutOutcomeId === pos.outcomeId;
+          const isThisBusy = busy && activeOutcomeId === pos.outcomeId;
+          const isWinner =
+            isResolved &&
+            winningOutcome !== undefined &&
+            pos.outcomeId === winningOutcome;
+          const isLoser =
+            isResolved &&
+            winningOutcome !== undefined &&
+            pos.outcomeId !== winningOutcome;
+
           return (
             <li
               key={pos.outcomeId}
@@ -266,8 +326,19 @@ export function UserPositions({
                   {pos.outcome}
                 </span>
                 {pos.claimed && (
-                  <span className="text-[11px] font-semibold text-[var(--muted)]">
+                  <span
+                    data-testid="claimed-badge"
+                    className="text-[11px] font-semibold text-[var(--muted)]"
+                  >
                     Claimed
+                  </span>
+                )}
+                {isLoser && !pos.claimed && (
+                  <span
+                    data-testid="position-lost-badge"
+                    className="rounded-md bg-[var(--danger)]/15 px-2 py-1 text-[11px] font-extrabold uppercase tracking-wide text-[var(--danger)]"
+                  >
+                    Position Lost
                   </span>
                 )}
               </div>
@@ -297,34 +368,57 @@ export function UserPositions({
                 </div>
               </dl>
 
-              <button
-                type="button"
-                data-testid={`cashout-${pos.outcome}`}
-                disabled={busy || pos.claimed || isDemoMode}
-                onClick={() => void handleCashout(pos.outcomeId)}
-                className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-secondary px-3 text-sm font-bold text-foreground ring-1 ring-border transition hover:border-primary/40 hover:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
-                title={
-                  isDemoMode
-                    ? "Cashout is available in live mode"
-                    : "Redeem shares for ETH before resolution"
-                }
-              >
-                {isThisBusy && isPending ? (
-                  <>Confirming in Wallet...</>
-                ) : isThisBusy && isConfirming ? (
-                  <>
-                    <LoaderCircle
-                      className="size-4 animate-spin"
-                      aria-hidden
-                      data-testid="cashout-spinner"
-                    />
-                    Executing on Arbitrum...
-                  </>
-                ) : (
-                  <>Instant Cashout</>
-                )}
-              </button>
-              {isDemoMode && (
+              {!isResolved && (
+                <button
+                  type="button"
+                  data-testid={`cashout-${pos.outcome}`}
+                  disabled={busy || pos.claimed || isDemoMode}
+                  onClick={() => void handleCashout(pos.outcomeId)}
+                  className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-secondary px-3 text-sm font-bold text-foreground ring-1 ring-border transition hover:border-primary/40 hover:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isThisBusy && isPending ? (
+                    <>Confirming in Wallet...</>
+                  ) : isThisBusy && isConfirming ? (
+                    <>
+                      <LoaderCircle
+                        className="size-4 animate-spin"
+                        aria-hidden
+                        data-testid="cashout-spinner"
+                      />
+                      Executing on Arbitrum...
+                    </>
+                  ) : (
+                    <>Instant Cashout</>
+                  )}
+                </button>
+              )}
+
+              {isWinner && !pos.claimed && (
+                <button
+                  type="button"
+                  data-testid={`claim-${pos.outcome}`}
+                  disabled={busy || isDemoMode || pos.shares <= BigInt(0)}
+                  onClick={() => void handleClaim(pos.outcomeId)}
+                  className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 text-sm font-extrabold text-white shadow-[0_0_22px_color-mix(in_oklab,#10b981_55%,transparent)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isThisBusy && txAction === "claim" && isPending ? (
+                    <>Confirming in Wallet...</>
+                  ) : isThisBusy && txAction === "claim" && isConfirming ? (
+                    <>
+                      <LoaderCircle
+                        className="size-4 animate-spin"
+                        aria-hidden
+                        data-testid="claim-spinner"
+                      />
+                      Claiming on Stylus...
+                    </>
+                  ) : (
+                    <>Claim Winnings</>
+                  )}
+                </button>
+              )}
+
+              {isDemoMode && !isResolved && (
                 <p className="mt-2 text-center text-[11px] text-[var(--muted)]">
                   Demo Mode — switch off to cash out on Stylus.
                 </p>
@@ -346,7 +440,7 @@ export function UserPositions({
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-emerald-700 hover:underline dark:text-emerald-300"
           >
-            Cashout confirmed · {shortTxHash(hash)}
+            {successLabel} · {shortTxHash(hash)}
             <ExternalLink className="size-3.5" aria-hidden />
           </a>
         </div>
