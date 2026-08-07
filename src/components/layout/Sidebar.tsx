@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  Briefcase,
   ChartCandlestick,
   LayoutDashboard,
   Menu,
@@ -33,6 +34,12 @@ const NAV_ITEMS = [
     icon: ChartCandlestick,
   },
   {
+    href: "/markets/portfolio",
+    label: "Portfolio",
+    description: "Your bets across markets",
+    icon: Briefcase,
+  },
+  {
     href: "/markets/create",
     label: "Create Market",
     description: "AI generative deploy card",
@@ -42,12 +49,13 @@ const NAV_ITEMS = [
 
 function isActivePath(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
-  // Keep /markets hub distinct from /markets/create.
+  // Keep /markets hub distinct from create / portfolio sub-routes.
   if (href === "/markets") {
     return (
       pathname === "/markets" ||
       (pathname.startsWith("/markets/") &&
-        !pathname.startsWith("/markets/create"))
+        !pathname.startsWith("/markets/create") &&
+        !pathname.startsWith("/markets/portfolio"))
     );
   }
   return pathname === href || pathname.startsWith(`${href}/`);
