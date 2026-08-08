@@ -8,6 +8,10 @@ export const NINO_CONTRACT_ADDRESS = (process.env
   .NEXT_PUBLIC_NINO_CONTRACT_ADDRESS ||
   "0xf129b27fe733114d4855f1a605160e962ae66330") as `0x${string}`;
 
+/** Hardcoded Climate Relayer / admin from the Stylus contract. */
+export const CLIMATE_RELAYER_ADMIN =
+  "0xca76951A11A9adE6553ef54AB1d1260f08c3460d" as const;
+
 /**
  * Solidity ABI from Stylus export.
  *
@@ -45,3 +49,24 @@ export function usdcToBaseUnits(amount: number): bigint {
   if (!Number.isFinite(amount) || amount < 0) return BigInt(0);
   return BigInt(Math.round(amount * 10 ** USDC_DECIMALS));
 }
+
+export function formatUsdcFromBaseUnits(amount: bigint): string {
+  const whole = amount / BigInt(10 ** USDC_DECIMALS);
+  const frac = amount % BigInt(10 ** USDC_DECIMALS);
+  const fracStr = frac.toString().padStart(USDC_DECIMALS, "0").replace(/0+$/, "");
+  return fracStr ? `${whole}.${fracStr}` : whole.toString();
+}
+
+export const ARBISCAN_TX = "https://sepolia.arbiscan.io/tx";
+export const ARBISCAN_ADDRESS = "https://sepolia.arbiscan.io/address";
+
+/** Browser event for Demo Mode payout feed injection. */
+export const EL_NINO_DEMO_PAYOUT_EVENT = "elnino:demo-payout";
+
+export type ElNinoPayoutEvent = {
+  farmer: `0x${string}`;
+  location: string;
+  amount: bigint;
+  transactionHash?: `0x${string}`;
+  receivedAt: number;
+};
