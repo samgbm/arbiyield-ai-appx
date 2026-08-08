@@ -2,45 +2,56 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentType } from "react";
 import {
+  BookOpen,
   Briefcase,
   ChartCandlestick,
   CloudRain,
-  FileJson,
+  HeartHandshake,
   LayoutDashboard,
   Menu,
-  ShieldCheck,
+  PackagePlus,
   Sparkles,
   Tractor,
   TrendingUp,
   Truck,
   X,
-  Zap,
 } from "lucide-react";
-import { useDemoStore } from "@/store/useDemoStore";
 
 /**
- * App Switcher sidebar — toggles between Yield, Prediction Markets, and the
- * El Niño Climate Resilience module.
+ * App Switcher sidebar — Yield → Markets → El Niño (demo flow).
  * Desktop: fixed left rail. Mobile: slide-over drawer + overlay.
  */
 
-const NAV_ITEMS = [
-  {
-    href: "/",
-    label: "Yield Dashboard",
-    description: "AI strategies · Stylus ledger",
-    icon: LayoutDashboard,
-    testId: "nav-yield-dashboard",
-  },
+type NavItem = {
+  href: string;
+  label: string;
+  description: string;
+  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  testId: string;
+};
+
+/** Yield module — demo flow step 1. */
+export const YIELD_NAV_ITEMS: readonly NavItem[] = [
   {
     href: "/strategies",
     label: "Yield Strategies",
-    description: "On-chain sleeves · Stylus hub",
+    description: "Live hub · Stylus + Supabase",
     icon: TrendingUp,
     testId: "nav-yield-strategies",
   },
+  {
+    href: "/strategies/create",
+    label: "Create Strategy",
+    description: "AI generator · sign on-chain",
+    icon: LayoutDashboard,
+    testId: "nav-yield-create",
+  },
+] as const;
+
+/** Prediction markets — demo flow step 2. */
+export const MARKET_NAV_ITEMS: readonly NavItem[] = [
   {
     href: "/markets",
     label: "Prediction Markets",
@@ -62,23 +73,26 @@ const NAV_ITEMS = [
     icon: Sparkles,
     testId: "nav-create-market",
   },
-  {
-    href: "/docs",
-    label: "API Docs",
-    description: "OpenAPI · Try it out",
-    icon: FileJson,
-    testId: "nav-docs",
-  },
 ] as const;
 
-/** El Niño Climate Resilience module routes (Increment 1 shell). */
-export const EL_NINO_NAV_ITEMS = [
+/**
+ * El Niño Climate Resilience — demo flow step 3.
+ * Order: awareness → fund pool → onboard → seal checkpoints → track → oracle.
+ */
+export const EL_NINO_NAV_ITEMS: readonly NavItem[] = [
   {
-    href: "/el-nino/logistics",
-    label: "Logistics Tracker",
-    description: "Aid route provenance · QR",
-    icon: Truck,
-    testId: "nav-el-nino-logistics",
+    href: "/el-nino",
+    label: "El Niño Overview",
+    description: "Mission · demo guide",
+    icon: BookOpen,
+    testId: "nav-el-nino-overview",
+  },
+  {
+    href: "/el-nino/funding",
+    label: "Relief Funding",
+    description: "Crowdfund ETH · zero-click",
+    icon: HeartHandshake,
+    testId: "nav-el-nino-funding",
   },
   {
     href: "/el-nino/onboarding",
@@ -86,6 +100,20 @@ export const EL_NINO_NAV_ITEMS = [
     description: "Batch register cooperatives",
     icon: Tractor,
     testId: "nav-el-nino-onboarding",
+  },
+  {
+    href: "/el-nino/register",
+    label: "Register Checkpoint",
+    description: "Seal hash on-chain + SQL",
+    icon: PackagePlus,
+    testId: "nav-el-nino-register",
+  },
+  {
+    href: "/el-nino/logistics",
+    label: "Logistics Tracker",
+    description: "Aid route provenance · QR",
+    icon: Truck,
+    testId: "nav-el-nino-logistics",
   },
   {
     href: "/el-nino/oracle",
@@ -98,7 +126,9 @@ export const EL_NINO_NAV_ITEMS = [
 
 function isActivePath(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
-  // Keep /markets hub distinct from create / portfolio sub-routes.
+  // Exact match for El Niño overview so child routes don't highlight it.
+  if (href === "/el-nino") return pathname === "/el-nino";
+  // Keep hubs distinct from nested create / detail routes.
   if (href === "/markets") {
     return (
       pathname === "/markets" ||
@@ -107,7 +137,72 @@ function isActivePath(pathname: string, href: string) {
         !pathname.startsWith("/markets/portfolio"))
     );
   }
+  if (href === "/strategies") {
+    return (
+      pathname === "/strategies" ||
+      (pathname.startsWith("/strategies/") &&
+        !pathname.startsWith("/strategies/create"))
+    );
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function NavSection({
+  title,
+  items,
+  pathname,
+  onNavigate,
+  activeClass,
+}: {
+  title: string;
+  items: readonly NavItem[];
+  pathname: string;
+  onNavigate: () => void;
+  activeClass: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="mb-1 px-3 font-mono-explorer text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+        {title}
+      </p>
+      {items.map((item) => {
+        const active = isActivePath(pathname, item.href);
+        const Icon = item.icon;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            data-testid={item.testId}
+            onClick={onNavigate}
+            className={`flex min-h-12 items-start gap-3 rounded-xl px-3 py-2.5 transition ${
+              active
+                ? activeClass
+                : "text-[var(--accent)] hover:bg-[color-mix(in_oklab,var(--foreground)_6%,transparent)] hover:text-foreground"
+            }`}
+          >
+            <Icon
+              className={`mt-0.5 size-5 shrink-0 ${
+                active
+                  ? activeClass.includes("sky")
+                    ? "text-sky-500"
+                    : activeClass.includes("violet")
+                      ? "text-violet-500"
+                      : "text-primary"
+                  : ""
+              }`}
+              aria-hidden
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold">{item.label}</span>
+              <span className="mt-0.5 block text-xs text-[var(--muted)]">
+                {item.description}
+              </span>
+            </span>
+          </Link>
+        );
+      })}
+    </div>
+  );
 }
 
 export function Sidebar() {
@@ -116,8 +211,6 @@ export function Sidebar() {
   // navigating away closes it without a setState-in-effect.
   const [openedForPath, setOpenedForPath] = useState<string | null>(null);
   const mobileOpen = openedForPath === pathname;
-  const isDemoMode = useDemoStore((s) => s.isDemoMode);
-  const toggleDemoMode = useDemoStore((s) => s.toggleDemoMode);
 
   // Prevent background scroll while the mobile drawer is open.
   useEffect(() => {
@@ -129,6 +222,8 @@ export function Sidebar() {
     };
   }, [mobileOpen]);
 
+  const closeMobile = () => setOpenedForPath(null);
+
   const nav = (
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-4 py-4">
@@ -136,121 +231,52 @@ export function Sidebar() {
           App switcher
         </p>
         <p className="mt-1 text-sm font-bold text-foreground">ArbiYield AI</p>
+        <p className="mt-1 text-[11px] leading-snug text-[var(--muted)]">
+          Home showcase · Yield → Markets → El Niño
+        </p>
+        <Link
+          href="/"
+          onClick={() => setOpenedForPath(null)}
+          data-testid="nav-home"
+          className="mt-2 inline-flex text-xs font-bold text-primary hover:underline"
+        >
+          ← Presentation home
+        </Link>
       </div>
 
       <nav
         aria-label="Modules"
         data-testid="app-sidebar-nav"
-        className="flex flex-1 flex-col gap-1 overflow-y-auto p-3"
+        className="flex flex-1 flex-col gap-4 overflow-y-auto p-3"
       >
-        {NAV_ITEMS.map((item) => {
-          const active = isActivePath(pathname, item.href);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              data-testid={item.testId}
-              onClick={() => setOpenedForPath(null)}
-              className={`flex min-h-12 items-start gap-3 rounded-xl px-3 py-2.5 transition ${
-                active
-                  ? "bg-primary/12 text-foreground ring-1 ring-primary/30"
-                  : "text-[var(--accent)] hover:bg-[color-mix(in_oklab,var(--foreground)_6%,transparent)] hover:text-foreground"
-              }`}
-            >
-              <Icon
-                className={`mt-0.5 size-5 shrink-0 ${active ? "text-primary" : ""}`}
-                aria-hidden
-              />
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold">{item.label}</span>
-                <span className="mt-0.5 block text-xs text-[var(--muted)]">
-                  {item.description}
-                </span>
-              </span>
-            </Link>
-          );
-        })}
+        <NavSection
+          title="1 · Yield"
+          items={YIELD_NAV_ITEMS}
+          pathname={pathname}
+          onNavigate={() => setOpenedForPath(null)}
+          activeClass="bg-primary/12 text-foreground ring-1 ring-primary/30"
+        />
 
-        <div className="my-2 border-t border-border pt-3">
-          <p className="mb-1 px-3 font-mono-explorer text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-            El Niño Resilience
-          </p>
-          {EL_NINO_NAV_ITEMS.map((item) => {
-            const active = isActivePath(pathname, item.href);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                data-testid={item.testId}
-                onClick={() => setOpenedForPath(null)}
-                className={`flex min-h-12 items-start gap-3 rounded-xl px-3 py-2.5 transition ${
-                  active
-                    ? "bg-sky-500/12 text-foreground ring-1 ring-sky-500/35"
-                    : "text-[var(--accent)] hover:bg-[color-mix(in_oklab,var(--foreground)_6%,transparent)] hover:text-foreground"
-                }`}
-              >
-                <Icon
-                  className={`mt-0.5 size-5 shrink-0 ${active ? "text-sky-500" : ""}`}
-                  aria-hidden
-                />
-                <span className="min-w-0">
-                  <span className="block text-sm font-semibold">
-                    {item.label}
-                  </span>
-                  <span className="mt-0.5 block text-xs text-[var(--muted)]">
-                    {item.description}
-                  </span>
-                </span>
-              </Link>
-            );
-          })}
+        <div className="border-t border-border pt-3">
+          <NavSection
+            title="2 · Markets"
+            items={MARKET_NAV_ITEMS}
+            pathname={pathname}
+            onNavigate={closeMobile}
+            activeClass="bg-violet-500/12 text-foreground ring-1 ring-violet-500/35"
+          />
+        </div>
+
+        <div className="border-t border-border pt-3">
+          <NavSection
+            title="3 · El Niño Resilience"
+            items={EL_NINO_NAV_ITEMS}
+            pathname={pathname}
+            onNavigate={closeMobile}
+            activeClass="bg-sky-500/12 text-foreground ring-1 ring-sky-500/35"
+          />
         </div>
       </nav>
-
-      {/* Live-pitch fail-safe + system status */}
-      <div className="space-y-1 border-t border-border p-3">
-        <button
-          type="button"
-          onClick={toggleDemoMode}
-          aria-pressed={isDemoMode}
-          className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
-            isDemoMode
-              ? "bg-primary/15 text-primary ring-1 ring-primary/35"
-              : "text-[var(--muted)] hover:bg-[color-mix(in_oklab,var(--foreground)_6%,transparent)] hover:text-foreground"
-          }`}
-        >
-          <Zap
-            className={`size-5 shrink-0 ${isDemoMode ? "fill-primary/30" : ""}`}
-            aria-hidden
-          />
-          <span className="min-w-0">
-            <span className="block text-sm font-semibold">
-              Demo Mode {isDemoMode ? "On" : "Off"}
-            </span>
-            <span className="mt-0.5 block text-xs opacity-80">
-              Mock AI + Web3 for live pitches
-            </span>
-          </span>
-        </button>
-
-        <Link
-          href="/health"
-          onClick={() => setOpenedForPath(null)}
-          data-testid="nav-system-status"
-          className={`flex min-h-10 w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition ${
-            pathname.startsWith("/health")
-              ? "bg-emerald-500/12 text-emerald-700 ring-1 ring-emerald-500/30 dark:text-emerald-300"
-              : "text-[var(--muted)] hover:bg-[color-mix(in_oklab,var(--foreground)_6%,transparent)] hover:text-foreground"
-          }`}
-        >
-          <ShieldCheck className="size-4 shrink-0" aria-hidden />
-          <span className="text-xs font-semibold tracking-wide">
-            System Status
-          </span>
-        </Link>
-      </div>
     </div>
   );
 

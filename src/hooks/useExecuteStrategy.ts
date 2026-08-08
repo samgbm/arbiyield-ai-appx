@@ -10,8 +10,14 @@ import {
 } from "wagmi";
 import { useDemoMode } from "@/components/providers/DemoModeProvider";
 import { chainLogger } from "@/lib/chainLogger";
-import { CONTRACT_ADDRESS, strategyExecutorABI } from "@/lib/contract";
+import {
+  CONTRACT_ADDRESS,
+  strategyExecutorABI,
+  strategyIdFromName,
+} from "@/lib/contract";
 import { estimateArbitrumSepoliaFees } from "@/lib/gas";
+import type { Strategy } from "@/lib/schemas";
+import { createSupabaseClient } from "@/lib/supabaseClient";
 import { arbitrumSepolia } from "@/lib/wagmi";
 
 const DEMO_TX_HASH =
@@ -32,9 +38,13 @@ export function useExecuteStrategy() {
   const [mockConfirming, setMockConfirming] = useState(false);
   const [mockWaiting, setMockWaiting] = useState(false);
   const [mockSuccess, setMockSuccess] = useState(false);
+  const [pendingMeta, setPendingMeta] = useState<{
+    id: string;
+    strategy: Strategy;
+  } | null>(null);
 
   const {
-    writeContract,
+    writeContractAsync,
     data: hash,
     isPending: isConfirming,
     error,
@@ -46,7 +56,7 @@ export function useExecuteStrategy() {
   });
 
   useEffect(() => {
-    if (!isSuccess || isDemoMode || !hash) return;
+    if (!isSuccess || isDemoMode || !hash || !pendingMeta || !address) return;
 
     chainLogger.info(
       {
@@ -59,8 +69,39 @@ export function useExecuteStrategy() {
       "Blockchain write confirmed",
     );
 
-    void queryClient.invalidateQueries();
-  }, [isSuccess, isDemoMode, hash, address, queryClient]);
+    const { id, strategy } = pendingMeta;
+    void (async () => {
+      try {
+        const supabase = createSupabaseClient();
+        await supabase.from("strategies").upsert(
+          {
+            id,
+            name: strategy.strategyName,
+            description: strategy.description,
+            protocol: "AI Generated · Arbitrum",
+            risk_level: strategy.riskLevel,
+            apy_pct: strategy.expectedYield,
+            tvl_usd: 0,
+            execution_steps: strategy.steps,
+            narrative: strategy.description,
+            creator_address: address,
+            create_tx_hash: hash,
+            tags: ["AI", "Arbitrum"],
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "id" },
+        );
+      } catch (err) {
+        chainLogger.error(
+          { event: "supabase_strategy_upsert_failed", err },
+          "Failed to mirror strategy metadata",
+        );
+      } finally {
+        setPendingMeta(null);
+        void queryClient.invalidateQueries();
+      }
+    })();
+  }, [isSuccess, isDemoMode, hash, pendingMeta, address, queryClient]);
 
   useEffect(() => {
     if (!error || isDemoMode) return;
@@ -75,16 +116,16 @@ export function useExecuteStrategy() {
     );
   }, [error, isDemoMode, address]);
 
-  async function executeStrategy(
-    strategyName: string,
-    expectedYield: bigint,
-  ) {
+  async function executeStrategy(strategy: Strategy) {
+    const strategyName = strategy.strategyName.trim();
+    const id = strategyIdFromName(strategyName);
+
     if (isDemoMode) {
       chainLogger.info(
         {
           event: "demo_execute",
           strategyName,
-          expectedYield,
+          id,
           address,
           contract: CONTRACT_ADDRESS,
         },
@@ -99,59 +140,41 @@ export function useExecuteStrategy() {
       await wait(2000);
       setMockWaiting(false);
       setMockSuccess(true);
-      chainLogger.info(
-        {
-          event: "demo_execute_success",
-          txHash: DEMO_TX_HASH,
-          strategyName,
-          expectedYield,
-        },
-        "Demo mode: mock transaction succeeded",
-      );
       return;
     }
 
-    // Re-estimate right before send. Arbitrum Sepolia base fee often moves
-    // enough that a stale maxFeePerGas lands just under the new baseFee.
     let maxFeePerGas: bigint | undefined;
     let maxPriorityFeePerGas: bigint | undefined;
-    let baseFee: bigint | undefined;
 
     if (publicClient) {
       try {
         const fees = await estimateArbitrumSepoliaFees(publicClient);
-        baseFee = fees.baseFee;
         maxFeePerGas = fees.maxFeePerGas;
         maxPriorityFeePerGas = fees.maxPriorityFeePerGas;
       } catch {
-        // Fall back to wagmi/wallet defaults if fee estimate fails.
+        // wallet defaults
       }
     }
+
+    setPendingMeta({ id, strategy });
 
     chainLogger.info(
       {
         event: "tx_send",
-        functionName: "executeStrategy",
+        functionName: "createStrategy",
         contract: CONTRACT_ADDRESS,
         chainId: arbitrumSepolia.id,
         address,
-        strategyName,
-        expectedYield,
-        gas: {
-          baseFee,
-          maxFeePerGas,
-          maxPriorityFeePerGas,
-        },
-        args: [strategyName, expectedYield.toString()],
+        id,
       },
-      "Sending executeStrategy transaction",
+      "Sending createStrategy transaction",
     );
 
-    writeContract({
+    await writeContractAsync({
       address: CONTRACT_ADDRESS,
       abi: strategyExecutorABI,
-      functionName: "executeStrategy",
-      args: [strategyName, expectedYield],
+      functionName: "createStrategy",
+      args: [id],
       ...(maxFeePerGas != null
         ? { maxFeePerGas, maxPriorityFeePerGas }
         : {}),
@@ -162,6 +185,7 @@ export function useExecuteStrategy() {
     setMockConfirming(false);
     setMockWaiting(false);
     setMockSuccess(false);
+    setPendingMeta(null);
     reset();
   }
 

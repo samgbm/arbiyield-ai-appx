@@ -10,7 +10,7 @@ import {
   EL_NINO_DEMO_PAYOUT_EVENT,
   NINO_CONTRACT_ADDRESS,
   elninoABI,
-  formatUsdcFromBaseUnits,
+  formatEthFromWei,
   type ElNinoPayoutEvent,
 } from "@/lib/elninoContract";
 
@@ -84,7 +84,7 @@ export function PayoutFeed() {
       <header className="mb-4 flex items-start justify-between gap-3">
         <div>
           <p className="font-mono-explorer text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">
-            Zero-click payouts
+            Zero-click ETH from relief pool
           </p>
           <h2 className="text-xl font-bold tracking-tight text-foreground">
             Live Payout Feed
@@ -108,8 +108,9 @@ export function PayoutFeed() {
             Waiting for PayoutDisbursed…
           </p>
           <p className="mt-1 max-w-sm text-xs text-[var(--muted)]">
-            Push rainfall ≥ 50mm for an active location. Confirmed events appear
-            here with Arbiscan links — no page refresh.
+            Push rainfall ≥ 50mm for an active location. Real ETH leaves the
+            crowdfunded pool and lands in farmer wallets — Arbiscan links, no
+            refresh.
           </p>
         </div>
       ) : (
@@ -145,7 +146,7 @@ export function PayoutFeed() {
                     {payout.location}
                   </td>
                   <td className="px-2 py-3 font-extrabold tabular-nums text-emerald-700 dark:text-emerald-300">
-                    {formatUsdcFromBaseUnits(payout.amount)} USDC
+                    {formatEthFromWei(payout.amount)} ETH
                   </td>
                   <td className="px-2 py-3">
                     {payout.transactionHash ? (

@@ -116,7 +116,7 @@ export function ClimateRelayTrigger() {
           (address as `0x${string}` | undefined) ??
           "0x5a967532fd910921f970fcff449eb95b61c782f4",
         location,
-        amount: BigInt(100_000_000),
+        amount: BigInt("10000000000000000"), // 0.01 ETH from relief pool
         transactionHash: demoHash,
         receivedAt: Date.now(),
       };

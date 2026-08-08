@@ -14,6 +14,30 @@ export type MarketMetadataRow = {
 };
 
 /**
+ * Off-chain yield strategy metadata — matched to Stylus / demo strategies by `id`.
+ */
+export type StrategyMetadataRow = {
+  id: string;
+  name: string;
+  description: string;
+  protocol: string;
+  risk_level: "low" | "medium" | "high";
+  apy_pct: number;
+  tvl_usd: number;
+  sharpe: number | null;
+  utilization_pct: number | null;
+  health_factor: number | null;
+  weekly_pnl_pct: number | null;
+  tags: string[] | null;
+  narrative: string | null;
+  execution_steps: string[] | null;
+  creator_address: string | null;
+  create_tx_hash: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+/**
  * Create a Supabase browser/server client from public env vars.
  * Throws when URL or anon key are missing (also validated by Zod in `src/env.ts`).
  */

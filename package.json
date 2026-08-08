@@ -9,7 +9,9 @@
     "lint": "eslint",
     "test": "jest",
     "test:watch": "jest --watch",
-    "seed": "ts-node --project scripts/tsconfig.json scripts/seedMarkets.ts"
+    "seed": "ts-node --project scripts/tsconfig.json scripts/seedMarkets.ts",
+    "seed:aid": "ts-node --project scripts/tsconfig.json scripts/seedAidCheckpoints.ts",
+    "seed:strategies": "ts-node --project scripts/tsconfig.json scripts/seedStrategies.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.29",

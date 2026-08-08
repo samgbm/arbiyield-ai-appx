@@ -18,9 +18,9 @@ export default function ElNinoOraclePage() {
           </h1>
           <p className="max-w-3xl text-sm leading-relaxed text-[var(--accent)] sm:text-base">
             Push regional rainfall into the Stylus Climate Relayer. When the
-            flood threshold clears, active policies at that location receive
-            zero-click disbursements — watch them land in the live feed with
-            Arbiscan verification links.
+            flood threshold clears (≥ 50mm), active farmers are paid real ETH
+            from the crowdfunded relief pool — zero-click — and appear in the
+            live feed with Arbiscan links.
           </p>
           <a
             href={`https://sepolia.arbiscan.io/address/${NINO_CONTRACT_ADDRESS}`}

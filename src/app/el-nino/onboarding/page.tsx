@@ -1,7 +1,7 @@
 import { BatchOnboardForm } from "@/components/elnino/BatchOnboardForm";
 
 /**
- * Walkthrough 2 — Pre-El Niño farmer batch onboarding.
+ * Walkthrough 2 — Gamified pre-El Niño farmer batch onboarding.
  */
 export default function ElNinoOnboardingPage() {
   return (
@@ -12,11 +12,13 @@ export default function ElNinoOnboardingPage() {
             El Niño · Walkthrough 2
           </p>
           <h1 className="font-display text-3xl tracking-tight text-foreground sm:text-4xl">
-            Agricultural Cooperative Dashboard
+            Cooperative Quest — Armor Farmers Before the Flood
           </h1>
           <p className="max-w-2xl text-sm leading-relaxed text-[var(--accent)] sm:text-base">
-            Batch register localized parametric policies for smallholder farmers
-            before El Niño thresholds are met.
+            Batch-register smallholders with ETH coverage backed by the global
+            crowdfunding pool. Climb Impact Levels, stack combo bonuses, and
+            pull donors in so zero-click payouts never run dry when rainfall
+            clears 50mm.
           </p>
         </header>
 

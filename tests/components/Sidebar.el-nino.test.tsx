@@ -1,7 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import {
   EL_NINO_NAV_ITEMS,
+  MARKET_NAV_ITEMS,
   Sidebar,
+  YIELD_NAV_ITEMS,
 } from "../../src/components/layout/Sidebar";
 
 const mockPathname = jest.fn(() => "/");
@@ -27,49 +29,45 @@ jest.mock("next/link", () => ({
   ),
 }));
 
-jest.mock("../../src/store/useDemoStore", () => ({
-  useDemoStore: (
-    selector: (s: { isDemoMode: boolean; toggleDemoMode: () => void }) => unknown,
-  ) =>
-    selector({
-      isDemoMode: false,
-      toggleDemoMode: jest.fn(),
-    }),
-}));
-
-describe("Sidebar — El Niño Climate Resilience nav (Increment 1)", () => {
+describe("Sidebar — modular demo flow nav", () => {
   beforeEach(() => {
     mockPathname.mockReturnValue("/");
   });
 
-  it("renders all El Niño navigation links", () => {
+  it("separates Yield, Markets, and El Niño without Docs / Demo / Status", () => {
     render(<Sidebar />);
 
-    expect(screen.getByTestId("nav-el-nino-logistics")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-el-nino-onboarding")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-el-nino-oracle")).toBeInTheDocument();
+    expect(screen.getByText("1 · Yield")).toBeInTheDocument();
+    expect(screen.getByText("2 · Markets")).toBeInTheDocument();
+    expect(screen.getByText("3 · El Niño Resilience")).toBeInTheDocument();
 
-    expect(screen.getByText("Logistics Tracker")).toBeInTheDocument();
-    expect(screen.getByText("Farmer Onboarding")).toBeInTheDocument();
-    expect(screen.getByText("Oracle Trigger")).toBeInTheDocument();
+    expect(screen.queryByText("Docs")).not.toBeInTheDocument();
+    expect(screen.queryByText("API Docs")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Demo Mode/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("nav-system-status")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("nav-docs")).not.toBeInTheDocument();
+
+    expect(screen.getByTestId("nav-yield-strategies")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-markets")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-home")).toHaveAttribute("href", "/");
   });
 
-  it("points El Niño links at the scaffolded routes", () => {
+  it("points exported nav groups at the expected routes", () => {
     render(<Sidebar />);
 
-    for (const item of EL_NINO_NAV_ITEMS) {
+    for (const item of [
+      ...YIELD_NAV_ITEMS,
+      ...MARKET_NAV_ITEMS,
+      ...EL_NINO_NAV_ITEMS,
+    ]) {
       expect(screen.getByTestId(item.testId)).toHaveAttribute("href", item.href);
     }
   });
 
-  it("highlights the active El Niño route", () => {
-    mockPathname.mockReturnValue("/el-nino/oracle");
-    render(<Sidebar />);
-
-    const oracleLink = screen.getByTestId("nav-el-nino-oracle");
-    const logisticsLink = screen.getByTestId("nav-el-nino-logistics");
-
-    expect(oracleLink.className).toMatch(/ring-sky-500/);
-    expect(logisticsLink.className).not.toMatch(/ring-sky-500/);
+  it("orders Yield as hub then create", () => {
+    expect(YIELD_NAV_ITEMS.map((i) => i.href)).toEqual([
+      "/strategies",
+      "/strategies/create",
+    ]);
   });
 });

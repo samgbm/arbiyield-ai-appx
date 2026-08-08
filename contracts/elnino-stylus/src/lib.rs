@@ -1,7 +1,7 @@
 //! El Niño Climate Resilience — Arbitrum Stylus core
 //!
-//! Holds parametric farmer insurance policies and immutable aid-logistics
-//! checkpoint hashes. Increment 6 adds tamper-proof logistics provenance.
+//! Parametric farmer policies, immutable aid logistics, and a crowdfunded
+//! ETH relief pool that zero-click disbursements on flood thresholds.
 
 #![cfg_attr(not(any(test, feature = "export-abi")), no_main)]
 extern crate alloc;
@@ -10,6 +10,7 @@ use alloc::{string::String, vec::Vec};
 
 use alloy_primitives::{Address, B256, U256};
 use stylus_sdk::alloy_sol_types::sol;
+use stylus_sdk::call::transfer::transfer_eth;
 use stylus_sdk::{
     prelude::*,
     storage::{
@@ -27,10 +28,12 @@ pub const CLIMATE_RELAYER_ADMIN: Address = alloy_primitives::address!(
 pub const FLOOD_THRESHOLD_MM: u64 = 50;
 
 sol! {
-    /// Emitted when a farmer's parametric coverage is disbursed (simulated USDC).
+    /// Emitted when a farmer receives real ETH from the crowdfunded relief pool.
     event PayoutDisbursed(address indexed farmer, string location, uint256 amount);
     /// Emitted when an aid shipment checkpoint hash is sealed on-chain.
     event AidCheckpointLogged(bytes32 indexed batch_hash, string location, uint256 timestamp);
+    /// Emitted when a global donor tops up the disaster relief pool.
+    event DonationReceived(address indexed donor, uint256 amount, uint256 pool_total);
 }
 
 /// Parametric insurance policy for a single farmer (Stylus storage).
@@ -81,6 +84,16 @@ pub struct ElNinoResilience {
     farmer_ids: StorageVec<StorageAddress>,
     /// `mapping(bytes32 => AidCheckpoint) aid_batches`
     aid_batches: StorageMap<B256, AidCheckpoint>,
+    /// ETH available for zero-click flood payouts (accounting mirror of donated value).
+    relief_pool: StorageU256,
+    /// Lifetime ETH donated into the pool.
+    total_donated: StorageU256,
+    /// Lifetime ETH disbursed to farmers.
+    total_disbursed: StorageU256,
+    /// Per-donor cumulative contributions (leaderboard / transparency).
+    donations: StorageMap<Address, StorageU256>,
+    /// Iterable donor addresses.
+    donor_ids: StorageVec<StorageAddress>,
 }
 
 fn err(msg: &str) -> Vec<u8> {
@@ -105,6 +118,7 @@ impl ElNinoResilience {
     }
 
     /// Register many farmers in a single Stylus transaction (Walkthrough 2 / NFR-3).
+    /// `coverage_amounts` are ETH entitlements in wei, paid from the relief pool on flood.
     pub fn batch_register_farmers(
         &mut self,
         farmers: Vec<Address>,
@@ -144,7 +158,7 @@ impl ElNinoResilience {
         Ok(())
     }
 
-    /// View a farmer's policy as `(location_id, coverage_amount, is_active)`.
+    /// View a farmer's policy as `(location_id, coverage_amount_wei, is_active)`.
     pub fn get_policy(&self, farmer: Address) -> (String, U256, bool) {
         let policy = self.policies.getter(farmer);
         (
@@ -154,11 +168,71 @@ impl ElNinoResilience {
         )
     }
 
+    /// Crowdfund the disaster relief pool with real ETH (Arbitrum L2 = near-zero fees).
+    #[payable]
+    pub fn donate(&mut self) -> Result<(), Vec<u8>> {
+        let amount = self.vm().msg_value();
+        if amount == U256::ZERO {
+            return Err(err("donate: zero value"));
+        }
+
+        let donor = self.vm().msg_sender();
+        let prior = self.donations.get(donor);
+        if prior == U256::ZERO {
+            self.donor_ids.push(donor);
+        }
+        self.donations.setter(donor).set(prior + amount);
+
+        let pool = self.relief_pool.get() + amount;
+        self.relief_pool.set(pool);
+        self.total_donated.set(self.total_donated.get() + amount);
+
+        self.vm().log(DonationReceived {
+            donor,
+            amount,
+            pool_total: pool,
+        });
+
+        Ok(())
+    }
+
+    /// ETH currently reserved for zero-click flood payouts.
+    pub fn get_relief_pool(&self) -> U256 {
+        self.relief_pool.get()
+    }
+
+    /// `(total_donated, total_disbursed, relief_pool, donor_count)`.
+    pub fn get_pool_stats(&self) -> (U256, U256, U256, U256) {
+        (
+            self.total_donated.get(),
+            self.total_disbursed.get(),
+            self.relief_pool.get(),
+            U256::from(self.donor_ids.len() as u64),
+        )
+    }
+
+    /// Cumulative donation for a wallet (transparency / gamified leaderboard).
+    pub fn get_donation(&self, donor: Address) -> U256 {
+        self.donations.get(donor)
+    }
+
+    /// Number of unique donors recorded on-chain.
+    pub fn get_donor_count(&self) -> U256 {
+        U256::from(self.donor_ids.len() as u64)
+    }
+
+    /// Donor address at iterable index (for leaderboard UI).
+    pub fn get_donor_at(&self, index: U256) -> Address {
+        let i = index.to::<usize>();
+        self.donor_ids.get(i).unwrap_or(Address::ZERO)
+    }
+
     /// Climate Data Relay: if regional rainfall meets the flood threshold, disburse
-    /// coverage to every active farmer at that `location_id` (zero-click payout).
+    /// real ETH from the crowdfunded relief pool to every active farmer at
+    /// `location_id` (zero-click payout). Amount = min(coverage_wei, remaining pool).
     ///
-    /// Returns the number of farmers paid. ERC-20 transfer is simulated via
-    /// `PayoutDisbursed` + deactivating the policy (prevents double payouts).
+    /// Returns the number of farmers paid. Emits `PayoutDisbursed` and deactivates
+    /// each paid policy (prevents double payouts).
     pub fn process_climate_relay(
         &mut self,
         location_id: String,
@@ -191,6 +265,20 @@ impl ElNinoResilience {
                 continue;
             }
 
+            let pool = self.relief_pool.get();
+            if pool == U256::ZERO || coverage == U256::ZERO {
+                // No funds left — leave policy active for a later top-up + relay.
+                continue;
+            }
+
+            let payout = if coverage < pool { coverage } else { pool };
+
+            transfer_eth(self.vm(), farmer, payout)?;
+
+            self.relief_pool.set(pool - payout);
+            self.total_disbursed
+                .set(self.total_disbursed.get() + payout);
+
             {
                 let mut policy = self.policies.setter(farmer);
                 policy.is_active.set(false);
@@ -199,7 +287,7 @@ impl ElNinoResilience {
             self.vm().log(PayoutDisbursed {
                 farmer,
                 location: policy_location,
-                amount: coverage,
+                amount: payout,
             });
 
             paid_count += U256::from(1);
@@ -404,8 +492,8 @@ mod test {
         let mut contract = setup_initialized(&vm);
 
         let farmer = address!("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        // 100 USDC with 6 decimals.
-        let coverage = U256::from(100_000_000u64);
+        // 0.01 ETH coverage entitlement (wei).
+        let coverage = U256::from(10_000_000_000_000_000u64);
 
         contract
             .batch_register_farmers(
@@ -414,6 +502,18 @@ mod test {
                 alloc::vec![coverage],
             )
             .expect("register Piura farmer");
+
+        // Crowd-fund the relief pool before the flood trigger.
+        let donor = address!("0xdddddddddddddddddddddddddddddddddddddddd");
+        vm.set_sender(donor);
+        vm.set_value(U256::from(100_000_000_000_000_000u64)); // 0.1 ETH
+        contract.donate().expect("donate");
+        assert_eq!(
+            contract.get_relief_pool(),
+            U256::from(100_000_000_000_000_000u64)
+        );
+
+        vm.set_sender(CLIMATE_RELAYER_ADMIN);
 
         // Action 1 — below flood threshold.
         let below = contract
@@ -428,7 +528,7 @@ mod test {
         let (_, _, still_active) = contract.get_policy(farmer);
         assert!(still_active, "policy must stay active when threshold fails");
 
-        // Action 2 — severe rainfall (85mm).
+        // Action 2 — severe rainfall (85mm) → real ETH transfer from pool.
         let paid = contract
             .process_climate_relay(String::from("Piura"), U256::from(85))
             .expect("85mm should trigger payouts");
@@ -438,6 +538,10 @@ mod test {
         assert_eq!(location, "Piura");
         assert_eq!(amount, coverage);
         assert!(!active, "policy must deactivate after payout");
+        assert_eq!(
+            contract.get_relief_pool(),
+            U256::from(90_000_000_000_000_000u64)
+        );
     }
 
     #[test]

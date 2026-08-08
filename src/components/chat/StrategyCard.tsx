@@ -46,8 +46,25 @@ export function StrategyCard({
   );
 
   function handleExecute() {
-    if (!ready || busy || typeof strategy.expectedYield !== "number") return;
-    void executeStrategy(strategyName, BigInt(strategy.expectedYield));
+    if (
+      !ready ||
+      busy ||
+      typeof strategy.expectedYield !== "number" ||
+      !strategy.riskLevel ||
+      !strategy.description
+    ) {
+      return;
+    }
+    const steps = (strategy.steps ?? []).filter(
+      (s): s is string => typeof s === "string" && s.length > 0,
+    );
+    void executeStrategy({
+      strategyName,
+      expectedYield: strategy.expectedYield,
+      riskLevel: strategy.riskLevel,
+      description: strategy.description,
+      steps,
+    });
   }
 
   return (

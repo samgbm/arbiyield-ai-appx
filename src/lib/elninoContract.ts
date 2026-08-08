@@ -1,35 +1,16 @@
-import { parseAbi } from "viem";
-
 /**
- * El Niño Climate Resilience (Stylus) — deploy address on Arbitrum Sepolia.
- * Set `NEXT_PUBLIC_NINO_CONTRACT_ADDRESS` after `cargo stylus deploy`.
+ * El Niño Climate Resilience (Stylus) — shared ABI + address helpers.
+ * Canonical ABI lives in `src/config/contracts.ts` (includes verifyAidBatch).
  */
-export const NINO_CONTRACT_ADDRESS = (process.env
-  .NEXT_PUBLIC_NINO_CONTRACT_ADDRESS ||
-  "0xf129b27fe733114d4855f1a605160e962ae66330") as `0x${string}`;
+export {
+  DEMO_AID_BATCH_HASH,
+  NINO_CONTRACT_ADDRESS,
+  ninoAbi as elninoABI,
+} from "@/config/contracts";
 
 /** Hardcoded Climate Relayer / admin from the Stylus contract. */
 export const CLIMATE_RELAYER_ADMIN =
   "0xca76951A11A9adE6553ef54AB1d1260f08c3460d" as const;
-
-/**
- * Solidity ABI from Stylus export.
- *
- * Stylus maps Rust snake_case → Solidity camelCase
- * (e.g. batch_register_farmers → batchRegisterFarmers).
- */
-export const elninoABI = parseAbi([
-  "function initialize()",
-  "function getAdmin() view returns (address)",
-  "function batchRegisterFarmers(address[] farmers, string[] locations, uint256[] coverage_amounts)",
-  "function getPolicy(address farmer) view returns (string, uint256, bool)",
-  "function processClimateRelay(string location_id, uint256 rainfall_mm) returns (uint256)",
-  "function logAidCheckpoint(bytes32 batch_hash, string location_name)",
-  "function verifyAidBatch(bytes32 batch_hash) view returns (string, uint256, bool)",
-  "function flagAidBatch(bytes32 batch_hash)",
-  "event PayoutDisbursed(address indexed farmer, string location, uint256 amount)",
-  "event AidCheckpointLogged(bytes32 indexed batch_hash, string location, uint256 timestamp)",
-]);
 
 /** Cooperative location IDs used by the Climate Data Relay. */
 export const EL_NINO_LOCATIONS = [
@@ -42,7 +23,7 @@ export const EL_NINO_LOCATIONS = [
 
 export type ElNinoLocation = (typeof EL_NINO_LOCATIONS)[number];
 
-/** USDC has 6 decimals on-chain. */
+/** Legacy USDC helpers (6 decimals) — prefer ETH wei helpers for relief pool. */
 export const USDC_DECIMALS = 6;
 
 export function usdcToBaseUnits(amount: number): bigint {
@@ -55,6 +36,27 @@ export function formatUsdcFromBaseUnits(amount: bigint): string {
   const frac = amount % BigInt(10 ** USDC_DECIMALS);
   const fracStr = frac.toString().padStart(USDC_DECIMALS, "0").replace(/0+$/, "");
   return fracStr ? `${whole}.${fracStr}` : whole.toString();
+}
+
+/** Convert a human ETH amount to wei for policy coverage / donations. */
+export function ethToWei(amount: number): bigint {
+  if (!Number.isFinite(amount) || amount < 0) return BigInt(0);
+  return BigInt(Math.round(amount * 1e18));
+}
+
+/** Format wei as a compact ETH string for UI. */
+export function formatEthFromWei(amount: bigint, digits = 4): string {
+  const neg = amount < BigInt(0);
+  const abs = neg ? -amount : amount;
+  const whole = abs / BigInt(1e18);
+  const frac = abs % BigInt(1e18);
+  const fracStr = frac
+    .toString()
+    .padStart(18, "0")
+    .slice(0, digits)
+    .replace(/0+$/, "");
+  const body = fracStr ? `${whole}.${fracStr}` : whole.toString();
+  return neg ? `-${body}` : body;
 }
 
 export const ARBISCAN_TX = "https://sepolia.arbiscan.io/tx";
