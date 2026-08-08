@@ -1,3 +1,4 @@
+import * as React from "react";
 import { render, screen, within } from "@testing-library/react";
 import { parseEther } from "viem";
 import MarketsPage from "@/app/markets/page";
@@ -31,7 +32,6 @@ jest.mock("wagmi", () => ({
 }));
 
 jest.mock("recharts", () => {
-  const React = require("react") as typeof import("react");
   const Passthrough = ({ children }: { children?: React.ReactNode }) =>
     React.createElement(React.Fragment, null, children);
   return {

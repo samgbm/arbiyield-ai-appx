@@ -9,6 +9,7 @@ import {
   Waves,
   Zap,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   useAccount,
@@ -49,10 +50,9 @@ export function CrowdfundingPool() {
   const { address, isConnected } = useAccount();
   const publicClient = usePublicClient({ chainId: ARBITRUM_SEPOLIA_CHAIN_ID });
   const [amountEth, setAmountEth] = useState("0.05");
-  const [donors, setDonors] = useState<DonorRow[]>([]);
   const [demoPool, setDemoPool] = useState(parseEther("0.42"));
   const [demoDonated, setDemoDonated] = useState(parseEther("0.55"));
-  const [demoDisbursed, setDemoDisbursed] = useState(parseEther("0.13"));
+  const [demoDisbursed] = useState(parseEther("0.13"));
   const [demoDonorCount, setDemoDonorCount] = useState(12);
 
   const { data: stats, refetch: refetchStats } = useReadContract({
@@ -114,19 +114,20 @@ export function CrowdfundingPool() {
     void refetchMine();
   }, [isSuccess, txHash, refetchStats, refetchMine]);
 
-  // Build a lightweight donor leaderboard from iterable donor_ids.
-  useEffect(() => {
-    if (isDemoMode || !publicClient || !stats) return;
-    const donorCount = Number(stats[3]);
-    if (!Number.isFinite(donorCount) || donorCount <= 0) {
-      setDonors([]);
-      return;
-    }
+  const onChainDonorCount = Number(stats?.[3] ?? BigInt(0));
 
-    let cancelled = false;
-    void (async () => {
+  const { data: donors = [] } = useQuery({
+    queryKey: ["nino-donor-leaderboard", onChainDonorCount],
+    enabled:
+      !isDemoMode &&
+      Boolean(publicClient) &&
+      Boolean(stats) &&
+      Number.isFinite(onChainDonorCount) &&
+      onChainDonorCount > 0,
+    queryFn: async (): Promise<DonorRow[]> => {
+      if (!publicClient) return [];
       const rows: DonorRow[] = [];
-      const limit = Math.min(donorCount, 24);
+      const limit = Math.min(onChainDonorCount, 24);
       for (let i = 0; i < limit; i++) {
         const donor = await publicClient.readContract({
           address: NINO_CONTRACT_ADDRESS,
@@ -145,21 +146,17 @@ export function CrowdfundingPool() {
         });
         rows.push({ address: donor, amount });
       }
-      rows.sort((a, b) => (a.amount === b.amount ? 0 : a.amount > b.amount ? -1 : 1));
-      if (!cancelled) setDonors(rows.slice(0, 8));
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isDemoMode, publicClient, stats]);
+      rows.sort((a, b) =>
+        a.amount === b.amount ? 0 : a.amount > b.amount ? -1 : 1,
+      );
+      return rows.slice(0, 8);
+    },
+  });
 
   const totalDonated = isDemoMode ? demoDonated : (stats?.[0] ?? BigInt(0));
   const totalDisbursed = isDemoMode ? demoDisbursed : (stats?.[1] ?? BigInt(0));
   const reliefPool = isDemoMode ? demoPool : (stats?.[2] ?? BigInt(0));
-  const donorCount = isDemoMode
-    ? demoDonorCount
-    : Number(stats?.[3] ?? BigInt(0));
+  const donorCount = isDemoMode ? demoDonorCount : onChainDonorCount;
 
   const goalWei = parseEther(String(RELIEF_POOL_GOAL_ETH));
   const progressPct = useMemo(() => {

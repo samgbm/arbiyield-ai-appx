@@ -37,11 +37,7 @@ export type StrategyMetadataRow = {
   updated_at?: string;
 };
 
-/**
- * Create a Supabase browser/server client from public env vars.
- * Throws when URL or anon key are missing (also validated by Zod in `src/env.ts`).
- */
-export function createSupabaseClient(
+function buildSupabaseClient(
   url = process.env.NEXT_PUBLIC_SUPABASE_URL,
   anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
 ): SupabaseClient {
@@ -58,14 +54,28 @@ export function createSupabaseClient(
   return createClient(trimmedUrl, trimmedKey);
 }
 
-/** Lazy singleton for App Router API routes. */
+/** Lazy singleton — one GoTrueClient per browser context. */
 let supabaseSingleton: SupabaseClient | null = null;
 
 export function getSupabase(): SupabaseClient {
   if (!supabaseSingleton) {
-    supabaseSingleton = createSupabaseClient();
+    supabaseSingleton = buildSupabaseClient();
   }
   return supabaseSingleton;
+}
+
+/**
+ * Prefer the shared singleton. Custom url/key still create a one-off client
+ * (tests / scripts); default args reuse `getSupabase()`.
+ */
+export function createSupabaseClient(
+  url?: string,
+  anonKey?: string,
+): SupabaseClient {
+  if (url === undefined && anonKey === undefined) {
+    return getSupabase();
+  }
+  return buildSupabaseClient(url, anonKey);
 }
 
 /**

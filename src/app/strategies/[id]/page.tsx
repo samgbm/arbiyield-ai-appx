@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -12,6 +12,7 @@ import {
   TrendingUp,
   Waves,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { useReadContract } from "wagmi";
 import { useDemoMode } from "@/components/providers/DemoModeProvider";
 import { getDemoStrategy } from "@/data/mockStrategies";
@@ -20,7 +21,6 @@ import {
   strategyExecutorABI,
 } from "@/lib/contract";
 import { fetchStrategyMetadata } from "@/lib/strategyMetadata";
-import type { StrategyMetadataRow } from "@/lib/supabaseClient";
 import { arbitrumSepolia } from "@/lib/wagmi";
 import { zeroAddress } from "viem";
 
@@ -71,26 +71,11 @@ export default function StrategyDetailPage({
   const { id: rawId } = use(params);
   const id = decodeURIComponent(rawId);
   const { isDemoMode } = useDemoMode();
-  const [meta, setMeta] = useState<StrategyMetadataRow | null>(null);
-  const [metaLoading, setMetaLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
-    setMetaLoading(true);
-    void (async () => {
-      try {
-        const row = await fetchStrategyMetadata(id);
-        if (!cancelled) setMeta(row);
-      } catch {
-        if (!cancelled) setMeta(null);
-      } finally {
-        if (!cancelled) setMetaLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
+  const { data: meta = null, isLoading: metaLoading } = useQuery({
+    queryKey: ["strategy-metadata", id],
+    queryFn: () => fetchStrategyMetadata(id),
+  });
 
   const { data: creator, isLoading: creatorLoading } = useReadContract({
     address: CONTRACT_ADDRESS,

@@ -124,6 +124,14 @@ export function Header() {
           </Link>
 
           <Link
+            href="/docs"
+            data-testid="header-docs"
+            className="inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-[var(--accent)] transition hover:bg-[color-mix(in_oklab,var(--foreground)_6%,transparent)] hover:text-foreground"
+          >
+            API Docs
+          </Link>
+
+          <Link
             href="/health"
             data-testid="header-system-status"
             className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-[var(--accent)] transition hover:bg-[color-mix(in_oklab,var(--foreground)_6%,transparent)] hover:text-foreground"
@@ -219,6 +227,14 @@ export function Header() {
               onClick={() => setMenuOpen(false)}
             >
               Fund
+            </Link>
+
+            <Link
+              href="/docs"
+              className="inline-flex min-h-12 items-center rounded-xl px-3 text-base font-semibold text-foreground transition hover:bg-[color-mix(in_oklab,var(--foreground)_6%,transparent)]"
+              onClick={() => setMenuOpen(false)}
+            >
+              API Docs
             </Link>
 
             <Link

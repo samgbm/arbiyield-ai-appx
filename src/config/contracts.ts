@@ -20,7 +20,7 @@ export const ninoAbi = parseAbi([
   "function getAdmin() view returns (address)",
   "function batchRegisterFarmers(address[] farmers, string[] locations, uint256[] coverage_amounts)",
   "function getPolicy(address farmer) view returns (string, uint256, bool)",
-  "function donate()",
+  "function donate() payable",
   "function getReliefPool() view returns (uint256)",
   "function getPoolStats() view returns (uint256, uint256, uint256, uint256)",
   "function getDonation(address donor) view returns (uint256)",

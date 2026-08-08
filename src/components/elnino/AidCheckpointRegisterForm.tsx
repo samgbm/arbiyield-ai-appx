@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ExternalLink, LoaderCircle, PackagePlus } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   useAccount,
@@ -19,7 +20,7 @@ import {
 } from "@/lib/aidProvenance";
 import { ARBISCAN_TX } from "@/lib/elninoContract";
 import { estimateArbitrumSepoliaFees } from "@/lib/gas";
-import { createSupabaseClient } from "@/lib/supabaseClient";
+import { getSupabase } from "@/lib/supabaseClient";
 import { parseRPCError } from "@/utils/rpcErrorHandler";
 import type { Hex } from "viem";
 
@@ -69,8 +70,6 @@ export function AidCheckpointRegisterForm() {
     stepHash: `0x${string}`;
     txHash: `0x${string}`;
   } | null>(null);
-  const [lookingUpParent, setLookingUpParent] = useState(false);
-
   const {
     writeContractAsync,
     data: pendingTx,
@@ -88,60 +87,68 @@ export function AidCheckpointRegisterForm() {
     toast.error(parseRPCError(writeError));
   }, [writeError]);
 
-  useEffect(() => {
-    if (mode === "genesis") {
+  const parentLookupKey =
+    mode === "continue" && isBytes32Hex(parentHash.trim())
+      ? parentHash.trim().toLowerCase()
+      : null;
+
+  const { data: parentLookup, isFetching: lookingUpParent } = useQuery({
+    queryKey: ["aid-parent-lookup", parentLookupKey],
+    enabled: Boolean(parentLookupKey),
+    queryFn: async () => {
+      const supabase = getSupabase();
+      const { data: parent } = await supabase
+        .from("aid_checkpoints")
+        .select("shipment_id, step_type, step_index")
+        .eq("step_hash", parentLookupKey!)
+        .maybeSingle();
+      if (!parent) return null;
+
+      const { data: ship } = await supabase
+        .from("aid_shipments")
+        .select("trail_code, product_name, origin_farm")
+        .eq("id", parent.shipment_id)
+        .maybeSingle();
+      if (!ship) return null;
+
+      const order: AidStepType[] = ["farm", "factory", "depot", "store"];
+      const idx = order.indexOf(parent.step_type as AidStepType);
+      const nextStep =
+        idx >= 0 && idx < order.length - 1 ? order[idx + 1]! : null;
+
+      return {
+        trailCode: (ship.trail_code as string | null) ?? "",
+        productName: (ship.product_name as string | null) ?? "",
+        originFarm: (ship.origin_farm as string | null) ?? "",
+        nextStep,
+      };
+    },
+  });
+
+  // Apply parent lookup into local form fields when a new result arrives.
+  const [appliedParentKey, setAppliedParentKey] = useState<string | null>(null);
+  if (
+    parentLookupKey &&
+    parentLookup &&
+    parentLookupKey !== appliedParentKey
+  ) {
+    setAppliedParentKey(parentLookupKey);
+    setTrailCode(parentLookup.trailCode);
+    setProductName(parentLookup.productName);
+    setOriginFarm(parentLookup.originFarm);
+    if (parentLookup.nextStep) setStepType(parentLookup.nextStep);
+  }
+
+  function selectMode(next: Mode) {
+    setMode(next);
+    if (next === "genesis") {
       setStepType("farm");
       setParentHash("");
+      setAppliedParentKey(null);
       return;
     }
-    if (stepType === "farm") setStepType("factory");
-  }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-fill trail metadata from parent checkpoint.
-  useEffect(() => {
-    if (mode !== "continue") return;
-    const trimmed = parentHash.trim().toLowerCase();
-    if (!isBytes32Hex(trimmed)) return;
-
-    let cancelled = false;
-    setLookingUpParent(true);
-    void (async () => {
-      try {
-        const supabase = createSupabaseClient();
-        const { data: parent } = await supabase
-          .from("aid_checkpoints")
-          .select("shipment_id, step_type, step_index")
-          .eq("step_hash", trimmed)
-          .maybeSingle();
-        if (!parent || cancelled) return;
-
-        const { data: ship } = await supabase
-          .from("aid_shipments")
-          .select("trail_code, product_name, origin_farm")
-          .eq("id", parent.shipment_id)
-          .maybeSingle();
-        if (!ship || cancelled) return;
-
-        setTrailCode(ship.trail_code ?? "");
-        setProductName(ship.product_name ?? "");
-        setOriginFarm(ship.origin_farm ?? "");
-
-        const order: AidStepType[] = ["farm", "factory", "depot", "store"];
-        const idx = order.indexOf(parent.step_type as AidStepType);
-        if (idx >= 0 && idx < order.length - 1) {
-          setStepType(order[idx + 1]!);
-        }
-      } catch {
-        // Manual entry still works.
-      } finally {
-        if (!cancelled) setLookingUpParent(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [mode, parentHash]);
+    setStepType((current) => (current === "farm" ? "factory" : current));
+  }
 
   const previewHash = useMemo(() => {
     try {
@@ -312,7 +319,7 @@ export function AidCheckpointRegisterForm() {
       }
 
       setSavingOffchain(true);
-      const supabase = createSupabaseClient();
+      const supabase = getSupabase();
       let shipmentId: string | undefined;
       let stepIndex = 0;
 
@@ -418,7 +425,7 @@ export function AidCheckpointRegisterForm() {
         <button
           type="button"
           data-testid="mode-genesis"
-          onClick={() => setMode("genesis")}
+          onClick={() => selectMode("genesis")}
           className={`min-h-11 rounded-xl text-sm font-bold transition ${
             mode === "genesis"
               ? "bg-sky-600 text-white"
@@ -430,7 +437,7 @@ export function AidCheckpointRegisterForm() {
         <button
           type="button"
           data-testid="mode-continue"
-          onClick={() => setMode("continue")}
+          onClick={() => selectMode("continue")}
           className={`min-h-11 rounded-xl text-sm font-bold transition ${
             mode === "continue"
               ? "bg-sky-600 text-white"
